@@ -24,14 +24,17 @@ export default function CompanyGrid({ companies, solvedByCompany }: Props) {
           placeholder="Search companies..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="flex-1 max-w-sm bg-gray-900 border border-gray-800 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
+          className="flex-1 max-w-sm rounded-lg px-4 py-2 text-sm text-white outline-none transition-all"
+          style={{ backgroundColor: '#282828', border: '1px solid #3e3e3e' }}
+          onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+          onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
         />
-        <p className="text-gray-500 text-sm whitespace-nowrap">
+        <p className="text-sm whitespace-nowrap" style={{ color: 'rgba(235,235,245,0.35)' }}>
           Showing {filtered.length} of {companies.length} companies
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
         {filtered.map(company => (
           <CompanyCard
             key={company.slug}

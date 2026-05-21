@@ -34,10 +34,10 @@ function otpEmailHtml(code: string, heading: string, subheading: string) {
               <table cellpadding="0" cellspacing="0" border="0" role="presentation">
                 <tr>
                   <td style="width:36px;height:36px;background-color:#FFA116;border-radius:8px;text-align:center;vertical-align:middle;">
-                    <span style="font-size:12px;font-weight:800;color:#000000;line-height:36px;display:block;">LC</span>
+                    <span style="font-size:13px;font-weight:900;color:#000000;line-height:36px;display:block;">&lt;/&gt;</span>
                   </td>
                   <td style="padding-left:10px;vertical-align:middle;">
-                    <span style="color:#ffffff;font-weight:600;font-size:16px;">LeetCode Companies</span>
+                    <span style="color:#ffffff;font-weight:600;font-size:16px;">Code Company Wise</span>
                   </td>
                 </tr>
               </table>

@@ -41,30 +41,39 @@ export default function SignUpPage() {
     router.push(`/auth/verify?email=${encodeURIComponent(email.toLowerCase().trim())}`)
   }
 
+  const inputStyle = {
+    backgroundColor: '#282828',
+    border: '1px solid #3e3e3e',
+    color: '#fff',
+  }
+
   return (
-    <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <main className="min-h-screen flex items-center justify-center px-4 pt-14" style={{ backgroundColor: '#161616' }}>
+      <div className="w-full max-w-sm py-12">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-9 h-9 bg-[#FFA116] rounded-lg flex items-center justify-center font-bold text-black text-sm">
-            LC
-          </div>
-          <span className="text-white font-semibold text-lg">LeetCode Companies</span>
+        <div className="flex items-center justify-center gap-2.5 mb-8">
+          <svg width="34" height="34" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <rect width="64" height="64" rx="13" fill="#FFA116" />
+            <polyline points="20,20 12,32 20,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <polyline points="44,20 52,32 44,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <line x1="37" y1="20" x2="27" y2="44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" />
+          </svg>
+          <span className="text-white font-semibold text-lg tracking-tight">Code Company Wise</span>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
+        <div className="rounded-2xl p-8" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
           <h1 className="text-white text-2xl font-bold mb-1">Create account</h1>
-          <p className="text-gray-400 text-sm mb-6">Start tracking your interview prep</p>
+          <p className="text-sm mb-7" style={{ color: 'rgba(235,235,245,0.5)' }}>Start tracking your interview prep</p>
 
           {error && (
-            <div className="bg-red-900/30 border border-red-800/50 text-red-400 text-sm rounded-lg px-4 py-3 mb-5">
+            <div className="text-sm rounded-xl px-4 py-3 mb-5" style={{ backgroundColor: 'rgba(255,55,95,0.08)', border: '1px solid rgba(255,55,95,0.25)', color: '#ff6b8a' }}>
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(235,235,245,0.7)' }}>
                 Full Name
               </label>
               <input
@@ -72,12 +81,15 @@ export default function SignUpPage() {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Ravi Singh"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-orange-500/70 transition-colors"
+                className="w-full rounded-lg px-4 py-2.5 text-sm transition-all outline-none"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
               />
             </div>
 
             <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(235,235,245,0.7)' }}>
                 Email
               </label>
               <input
@@ -86,12 +98,15 @@ export default function SignUpPage() {
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-orange-500/70 transition-colors"
+                className="w-full rounded-lg px-4 py-2.5 text-sm transition-all outline-none"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
               />
             </div>
 
             <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(235,235,245,0.7)' }}>
                 Password
               </label>
               <input
@@ -100,12 +115,15 @@ export default function SignUpPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Min. 6 characters"
                 required
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-orange-500/70 transition-colors"
+                className="w-full rounded-lg px-4 py-2.5 text-sm transition-all outline-none"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
               />
             </div>
 
             <div>
-              <label className="block text-gray-300 text-sm font-medium mb-1.5">
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'rgba(235,235,245,0.7)' }}>
                 Confirm Password
               </label>
               <input
@@ -114,22 +132,26 @@ export default function SignUpPage() {
                 onChange={e => setConfirm(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-orange-500/70 transition-colors"
+                className="w-full rounded-lg px-4 py-2.5 text-sm transition-all outline-none"
+                style={inputStyle}
+                onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#FFA116] hover:bg-[#FFB84D] disabled:opacity-60 disabled:cursor-not-allowed text-black font-semibold py-2.5 rounded-lg text-sm transition-colors mt-1"
+              className="w-full font-semibold py-2.5 rounded-lg text-sm transition-colors mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: '#FFA116', color: '#000' }}
             >
               {loading ? 'Sending code…' : 'Create Account'}
             </button>
           </form>
 
-          <p className="text-center text-gray-500 text-sm mt-6">
+          <p className="text-center text-sm mt-6" style={{ color: 'rgba(235,235,245,0.4)' }}>
             Already have an account?{' '}
-            <Link href="/auth/signin" className="text-orange-400 hover:text-orange-300 font-medium">
+            <Link href="/auth/signin" className="font-medium" style={{ color: '#FFA116' }}>
               Sign in
             </Link>
           </p>

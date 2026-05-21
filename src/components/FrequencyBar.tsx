@@ -4,14 +4,16 @@ interface Props {
 
 export default function FrequencyBar({ value }: Props) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-20 bg-gray-800 rounded-full h-1.5">
+    <div className="flex items-center gap-2.5">
+      <div className="w-20 rounded-full h-1.5 overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
         <div
-          className="bg-orange-500 h-1.5 rounded-full"
-          style={{ width: `${Math.min(value, 100)}%` }}
+          className="h-full rounded-full"
+          style={{ width: `${Math.min(value, 100)}%`, backgroundColor: '#FFA116' }}
         />
       </div>
-      <span className="text-xs text-gray-400 w-10 tabular-nums">{value.toFixed(1)}%</span>
+      <span className="text-xs tabular-nums" style={{ color: 'rgba(235,235,245,0.45)', width: '36px' }}>
+        {value.toFixed(1)}%
+      </span>
     </div>
   )
 }

@@ -5,30 +5,36 @@ export default async function Navbar() {
   const session = await auth()
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-gray-900 border-b border-gray-800">
+    <nav className="fixed top-0 left-0 right-0 z-50 h-14 border-b" style={{ backgroundColor: '#1a1a1a', borderBottomColor: '#2a2a2a' }}>
       <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#FFA116] rounded flex items-center justify-center font-bold text-black text-sm">
-            LC
-          </div>
-          <span className="font-semibold text-white hidden sm:block">LeetCode Companies</span>
+        <Link href="/" className="flex items-center gap-2.5">
+          <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+            <rect width="64" height="64" rx="13" fill="#FFA116" />
+            <polyline points="20,20 12,32 20,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <polyline points="44,20 52,32 44,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <line x1="37" y1="20" x2="27" y2="44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" />
+          </svg>
+          <span className="font-semibold text-white hidden sm:block text-sm tracking-tight">Code Company Wise</span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {session?.user ? (
             <>
               <Link
                 href="/dashboard"
-                className="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition-colors hidden sm:block"
+                className="text-sm px-3 py-1.5 rounded-lg transition-colors hidden sm:block text-[rgba(235,235,245,0.6)] hover:text-white"
               >
                 Dashboard
               </Link>
-              <div className="hidden sm:flex items-center gap-2 mr-1">
-                <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 text-xs font-semibold">
+              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg mr-1">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                  style={{ backgroundColor: 'rgba(255,161,22,0.12)', border: '1.5px solid rgba(255,161,22,0.3)', color: '#FFA116' }}
+                >
                   {(session.user.name ?? session.user.email ?? 'U').charAt(0).toUpperCase()}
                 </div>
-                <span className="text-gray-300 text-sm">
-                  {session.user.name ?? session.user.email}
+                <span className="text-sm text-[rgba(235,235,245,0.8)]">
+                  {session.user.name?.split(' ')[0] ?? session.user.email}
                 </span>
               </div>
               <form
@@ -39,7 +45,7 @@ export default async function Navbar() {
               >
                 <button
                   type="submit"
-                  className="text-sm text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-1.5 transition-colors"
+                  className="text-sm rounded-lg px-3 py-1.5 transition-colors text-[rgba(235,235,245,0.6)] hover:text-white border border-[#3e3e3e] hover:border-[#555]"
                 >
                   Sign Out
                 </button>
@@ -49,13 +55,14 @@ export default async function Navbar() {
             <>
               <Link
                 href="/auth/signin"
-                className="text-sm text-gray-300 hover:text-white px-3 py-1.5 transition-colors"
+                className="text-sm px-3 py-1.5 rounded-lg transition-colors text-[rgba(235,235,245,0.6)] hover:text-white"
               >
                 Sign In
               </Link>
               <Link
                 href="/auth/signup"
-                className="text-sm bg-[#FFA116] hover:bg-[#FFB84D] text-black font-semibold rounded-lg px-4 py-1.5 transition-colors"
+                className="text-sm font-semibold rounded-lg px-4 py-1.5 transition-colors ml-1 hover:opacity-90"
+                style={{ backgroundColor: '#FFA116', color: '#000' }}
               >
                 Sign Up
               </Link>

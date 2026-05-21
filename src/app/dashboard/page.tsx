@@ -35,12 +35,6 @@ function calculateStreak(dates: string[]): number {
   return streak
 }
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  Easy: 'text-green-400',
-  Medium: 'text-yellow-400',
-  Hard: 'text-red-400',
-}
-
 export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/auth/signin')
@@ -55,7 +49,6 @@ export default async function DashboardPage() {
   const medium = solved.filter(s => s.difficulty === 'Medium').length
   const hard = solved.filter(s => s.difficulty === 'Hard').length
 
-  // Top companies
   const companyCounts: Record<string, number> = {}
   for (const s of solved) {
     companyCounts[s.company] = (companyCounts[s.company] ?? 0) + 1
@@ -64,94 +57,133 @@ export default async function DashboardPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
 
-  // Recent activity
   const recent = solved.slice(0, 10)
-
-  // Streak
   const dateSlugs = solved.map(s => s.solvedAt.toISOString().split('T')[0])
   const streak = calculateStreak(dateSlugs)
 
+  const difficultyColor: Record<string, string> = {
+    Easy: '#00B8A3',
+    Medium: '#FFB800',
+    Hard: '#FF375F',
+  }
+
   return (
-    <main className="min-h-screen bg-gray-950 pt-14">
+    <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
       <div className="max-w-5xl mx-auto px-4 py-8">
+
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-1">
             Welcome back, {session.user.name?.split(' ')[0] ?? 'there'}
           </h1>
-          <p className="text-gray-400 text-sm">Your interview prep progress at a glance</p>
+          <p className="text-sm" style={{ color: 'rgba(235,235,245,0.45)' }}>
+            Your interview prep progress at a glance
+          </p>
         </div>
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-xs mb-1">Total Solved</p>
-            <p className="text-white text-3xl font-bold">{total}</p>
+        {/* Stats overview card */}
+        <div className="rounded-xl p-6 mb-5" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+          <div className="flex flex-wrap gap-8 items-start">
+            {/* Total */}
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider mb-2" style={{ color: 'rgba(235,235,245,0.45)' }}>
+                Total Solved
+              </p>
+              <p className="text-5xl font-bold text-white tabular-nums">{total}</p>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px self-stretch hidden sm:block" style={{ backgroundColor: '#2a2a2a' }} />
+
+            {/* Difficulty breakdown */}
+            <div className="flex gap-7 flex-wrap">
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#00B8A3' }} />
+                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Easy</p>
+                </div>
+                <p className="text-3xl font-bold tabular-nums" style={{ color: '#00B8A3' }}>{easy}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#FFB800' }} />
+                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Medium</p>
+                </div>
+                <p className="text-3xl font-bold tabular-nums" style={{ color: '#FFB800' }}>{medium}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#FF375F' }} />
+                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Hard</p>
+                </div>
+                <p className="text-3xl font-bold tabular-nums" style={{ color: '#FF375F' }}>{hard}</p>
+              </div>
+            </div>
           </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-green-400 text-xs mb-1">Easy</p>
-            <p className="text-white text-3xl font-bold">{easy}</p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-yellow-400 text-xs mb-1">Medium</p>
-            <p className="text-white text-3xl font-bold">{medium}</p>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <p className="text-red-400 text-xs mb-1">Hard</p>
-            <p className="text-white text-3xl font-bold">{hard}</p>
-          </div>
+
+          {/* Stacked difficulty bar */}
+          {total > 0 && (
+            <div className="mt-6 flex rounded-full overflow-hidden h-2" style={{ backgroundColor: '#2a2a2a' }}>
+              <div style={{ width: `${(easy / total) * 100}%`, backgroundColor: '#00B8A3' }} />
+              <div style={{ width: `${(medium / total) * 100}%`, backgroundColor: '#FFB800' }} />
+              <div style={{ width: `${(hard / total) * 100}%`, backgroundColor: '#FF375F' }} />
+            </div>
+          )}
         </div>
 
         {/* Streak banner */}
         {streak > 0 && (
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-5 py-3 mb-8 flex items-center gap-3">
-            <span className="text-2xl">🔥</span>
+          <div className="rounded-xl px-5 py-3.5 mb-5 flex items-center gap-3" style={{ backgroundColor: 'rgba(255,161,22,0.07)', border: '1px solid rgba(255,161,22,0.18)' }}>
+            <span className="text-xl">🔥</span>
             <div>
-              <p className="text-orange-400 font-semibold text-sm">
-                {streak} day streak
+              <p className="font-semibold text-sm" style={{ color: '#FFA116' }}>
+                {streak}-day streak
               </p>
-              <p className="text-gray-400 text-xs">Keep it up — consistency beats intensity</p>
+              <p className="text-xs" style={{ color: 'rgba(235,235,245,0.4)' }}>
+                Consistency beats intensity — keep it up
+              </p>
             </div>
           </div>
         )}
 
         {total === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-            <p className="text-gray-400 mb-3">No problems solved yet</p>
+          <div className="rounded-xl p-12 text-center" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+            <p className="text-sm mb-4" style={{ color: 'rgba(235,235,245,0.45)' }}>No problems solved yet</p>
             <Link
               href="/"
-              className="inline-block bg-[#FFA116] hover:bg-[#FFB84D] text-black font-semibold rounded-lg px-5 py-2 text-sm transition-colors"
+              className="inline-block font-semibold rounded-lg px-6 py-2.5 text-sm transition-colors"
+              style={{ backgroundColor: '#FFA116', color: '#000' }}
             >
               Browse companies
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {/* Top companies */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h2 className="text-white font-semibold mb-4">Top Companies Practiced</h2>
-              <div className="space-y-3">
+            <div className="rounded-xl p-5" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+              <h2 className="font-semibold text-white text-sm mb-5">Top Companies Practiced</h2>
+              <div className="space-y-4">
                 {topCompanies.map(([slug, count]) => {
-                  const pct = Math.round((count / total) * 100)
+                  const pct = Math.round((count / (topCompanies[0][1] || 1)) * 100)
                   return (
                     <Link
                       key={slug}
                       href={`/company/${slug}`}
-                      className="flex items-center gap-3 group"
+                      className="block group"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-gray-200 text-sm group-hover:text-white transition-colors truncate">
-                            {formatCompanyName(slug)}
-                          </span>
-                          <span className="text-gray-400 text-xs ml-2 shrink-0">{count}</span>
-                        </div>
-                        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#FFA116] rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-sm transition-colors" style={{ color: 'rgba(235,235,245,0.7)' }}>
+                          {formatCompanyName(slug)}
+                        </span>
+                        <span className="text-xs tabular-nums" style={{ color: 'rgba(235,235,245,0.4)' }}>
+                          {count} solved
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${pct}%`, backgroundColor: '#FFA116', opacity: 0.8 }}
+                        />
                       </div>
                     </Link>
                   )
@@ -160,27 +192,33 @@ export default async function DashboardPage() {
             </div>
 
             {/* Recent activity */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h2 className="text-white font-semibold mb-4">Recent Activity</h2>
-              <div className="space-y-2">
+            <div className="rounded-xl p-5" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+              <h2 className="font-semibold text-white text-sm mb-5">Recent Activity</h2>
+              <div className="space-y-3">
                 {recent.map(s => (
-                  <div key={s.id} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                  <div key={s.id} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: difficultyColor[s.difficulty] ?? '#888' }}
+                      />
                       <a
                         href={`https://leetcode.com/problems/${s.problemSlug}/`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-gray-300 text-sm hover:text-white transition-colors truncate"
+                        className="text-sm truncate transition-colors hover:text-white"
+                        style={{ color: 'rgba(235,235,245,0.7)' }}
                       >
                         {s.problemSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                       </a>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-xs ${DIFFICULTY_COLOR[s.difficulty] ?? 'text-gray-400'}`}>
+                    <div className="flex items-center gap-2.5 flex-shrink-0">
+                      <span className="text-xs font-medium" style={{ color: difficultyColor[s.difficulty] ?? '#888' }}>
                         {s.difficulty}
                       </span>
-                      <span className="text-gray-600 text-xs">{timeAgo(s.solvedAt)}</span>
+                      <span className="text-xs" style={{ color: 'rgba(235,235,245,0.25)' }}>
+                        {timeAgo(s.solvedAt)}
+                      </span>
                     </div>
                   </div>
                 ))}

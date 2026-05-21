@@ -11,16 +11,16 @@ const PERIODS = Object.keys(TIME_PERIOD_LABELS) as TimePeriod[]
 
 export default function TimePeriodSelector({ selected, onChange }: Props) {
   return (
-    <div className="flex gap-0 border-b border-gray-800 overflow-x-auto">
+    <div className="flex overflow-x-auto" style={{ borderBottom: '1px solid #2a2a2a' }}>
       {PERIODS.map(period => (
         <button
           key={period}
           onClick={() => onChange(period)}
-          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-            selected === period
-              ? 'text-orange-400 border-orange-400'
-              : 'text-gray-500 border-transparent hover:text-gray-300'
-          }`}
+          className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px"
+          style={{
+            color: selected === period ? '#FFA116' : 'rgba(235,235,245,0.4)',
+            borderBottomColor: selected === period ? '#FFA116' : 'transparent',
+          }}
         >
           {TIME_PERIOD_LABELS[period]}
         </button>

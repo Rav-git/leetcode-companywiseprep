@@ -16,12 +16,10 @@ export default function VerifyPage() {
   const searchParams = useSearchParams()
   const email = searchParams.get('email') ?? ''
 
-  // Focus first input on mount
   useEffect(() => {
     inputRefs.current[0]?.focus()
   }, [])
 
-  // Resend cooldown timer
   useEffect(() => {
     if (resendCooldown <= 0) return
     const t = setTimeout(() => setResendCooldown(c => c - 1), 1000)
@@ -88,7 +86,6 @@ export default function VerifyPage() {
       return
     }
 
-    // Auto sign-in using the one-time token returned by the server (no password stored)
     if (data.signInToken) {
       const result = await signIn('credentials', {
         email,
@@ -128,40 +125,43 @@ export default function VerifyPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <main className="min-h-screen flex items-center justify-center px-4 pt-14" style={{ backgroundColor: '#161616' }}>
+      <div className="w-full max-w-sm py-12">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-9 h-9 bg-[#FFA116] rounded-lg flex items-center justify-center font-bold text-black text-sm">
-            LC
-          </div>
-          <span className="text-white font-semibold text-lg">LeetCode Companies</span>
+        <div className="flex items-center justify-center gap-2.5 mb-8">
+          <svg width="34" height="34" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+            <rect width="64" height="64" rx="13" fill="#FFA116" />
+            <polyline points="20,20 12,32 20,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <polyline points="44,20 52,32 44,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <line x1="37" y1="20" x2="27" y2="44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" />
+          </svg>
+          <span className="text-white font-semibold text-lg tracking-tight">Code Company Wise</span>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
+        <div className="rounded-2xl p-8" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
           {/* Email icon */}
-          <div className="w-12 h-12 bg-orange-500/10 border border-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-5">
-            <svg className="w-6 h-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: 'rgba(255,161,22,0.1)', border: '1.5px solid rgba(255,161,22,0.25)' }}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#FFA116">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
 
           <h1 className="text-white text-2xl font-bold mb-1 text-center">Check your email</h1>
-          <p className="text-gray-400 text-sm text-center mb-1">
+          <p className="text-sm text-center mb-1" style={{ color: 'rgba(235,235,245,0.5)' }}>
             We sent a 6-digit code to
           </p>
-          <p className="text-orange-400 text-sm font-medium text-center mb-7 truncate">
+          <p className="text-sm font-medium text-center mb-7 truncate" style={{ color: '#FFA116' }}>
             {email}
           </p>
 
           {error && (
-            <div className="bg-red-900/30 border border-red-800/50 text-red-400 text-sm rounded-lg px-4 py-3 mb-5 text-center">
+            <div className="text-sm rounded-xl px-4 py-3 mb-5 text-center" style={{ backgroundColor: 'rgba(255,55,95,0.08)', border: '1px solid rgba(255,55,95,0.25)', color: '#ff6b8a' }}>
               {error}
             </div>
           )}
 
           {resendMsg && (
-            <div className="bg-green-900/30 border border-green-800/50 text-green-400 text-sm rounded-lg px-4 py-3 mb-5 text-center">
+            <div className="text-sm rounded-xl px-4 py-3 mb-5 text-center" style={{ backgroundColor: 'rgba(0,184,163,0.08)', border: '1px solid rgba(0,184,163,0.25)', color: '#00B8A3' }}>
               {resendMsg}
             </div>
           )}
@@ -179,9 +179,22 @@ export default function VerifyPage() {
                 onChange={e => handleChange(i, e.target.value)}
                 onKeyDown={e => handleKeyDown(i, e)}
                 onPaste={handlePaste}
-                className={`w-11 h-12 text-center text-white text-xl font-bold bg-gray-800 rounded-lg border transition-all outline-none
-                  ${digit ? 'border-orange-500/70' : 'border-gray-700'}
-                  focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20`}
+                className="w-11 h-12 text-center text-white text-xl font-bold rounded-lg outline-none transition-all"
+                style={{
+                  backgroundColor: '#282828',
+                  border: digit ? '1.5px solid #FFA116' : '1px solid #3e3e3e',
+                  boxShadow: digit ? '0 0 0 3px rgba(255,161,22,0.1)' : 'none',
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.borderColor = '#FFA116'
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,161,22,0.1)'
+                }}
+                onBlur={e => {
+                  if (!digit) {
+                    e.currentTarget.style.borderColor = '#3e3e3e'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }
+                }}
               />
             ))}
           </div>
@@ -189,18 +202,20 @@ export default function VerifyPage() {
           <button
             onClick={handleVerify}
             disabled={loading || digits.join('').length < 6}
-            className="w-full bg-[#FFA116] hover:bg-[#FFB84D] disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold py-2.5 rounded-lg text-sm transition-colors"
+            className="w-full font-semibold py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: '#FFA116', color: '#000' }}
           >
             {loading ? 'Verifying…' : 'Verify Email'}
           </button>
 
           <div className="text-center mt-5">
-            <p className="text-gray-500 text-sm">
+            <p className="text-sm" style={{ color: 'rgba(235,235,245,0.4)' }}>
               Didn&apos;t receive the code?{' '}
               <button
                 onClick={handleResend}
                 disabled={resendCooldown > 0}
-                className="text-orange-400 hover:text-orange-300 disabled:text-gray-600 disabled:cursor-not-allowed font-medium transition-colors"
+                className="font-medium transition-colors disabled:cursor-not-allowed"
+                style={{ color: resendCooldown > 0 ? 'rgba(235,235,245,0.2)' : '#FFA116' }}
               >
                 {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
               </button>
@@ -208,13 +223,13 @@ export default function VerifyPage() {
           </div>
 
           <div className="text-center mt-3">
-            <Link href="/auth/signup" className="text-gray-600 hover:text-gray-400 text-xs transition-colors">
+            <Link href="/auth/signup" className="text-xs transition-colors" style={{ color: 'rgba(235,235,245,0.3)' }}>
               ← Use a different email
             </Link>
           </div>
         </div>
 
-        <p className="text-center text-gray-600 text-xs mt-4">
+        <p className="text-center text-xs mt-4" style={{ color: 'rgba(235,235,245,0.25)' }}>
           Code expires in 10 minutes
         </p>
       </div>

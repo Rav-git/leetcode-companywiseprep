@@ -5,7 +5,6 @@ import { auth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import ProblemTable from '@/components/ProblemTable'
-import ProgressBar from '@/components/ProgressBar'
 
 interface Props {
   params: { slug: string }
@@ -40,13 +39,17 @@ export default async function CompanyPage({ params }: Props) {
 
   const color = getCompanyColor(slug)
   const name = formatCompanyName(slug)
+  const solvedPct = stats.totalCount > 0 ? Math.round((solvedCount / stats.totalCount) * 100) : 0
 
   return (
-    <main className="min-h-screen bg-gray-950 pt-14">
+    <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
       <div className="max-w-7xl mx-auto px-4 py-8">
+
+        {/* Back link */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm mb-7 transition-colors"
+          style={{ color: 'rgba(235,235,245,0.45)' }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -54,28 +57,56 @@ export default async function CompanyPage({ params }: Props) {
           Back to companies
         </Link>
 
-        <div className="flex flex-col sm:flex-row sm:items-start gap-4 mb-8">
+        {/* Company header */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-5 mb-8">
+          {/* Avatar */}
           <div
-            className="w-14 h-14 rounded-xl flex items-center justify-center text-white text-2xl font-bold flex-shrink-0"
-            style={{ backgroundColor: color }}
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold flex-shrink-0"
+            style={{
+              backgroundColor: color + '22',
+              border: `2px solid ${color}44`,
+              color,
+            }}
           >
             {name.charAt(0)}
           </div>
 
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-white mb-2">{name}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="text-green-400">{stats.easyCount} Easy</span>
-              <span className="text-yellow-400">{stats.mediumCount} Medium</span>
-              <span className="text-red-400">{stats.hardCount} Hard</span>
-              <span className="text-gray-600">·</span>
-              <span className="text-gray-400">{stats.totalCount} total problems</span>
+            <h1 className="text-3xl font-bold text-white mb-2.5">{name}</h1>
+
+            {/* Difficulty stats */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-4">
+              <span className="font-medium" style={{ color: '#00B8A3' }}>
+                {stats.easyCount} Easy
+              </span>
+              <span className="font-medium" style={{ color: '#FFB800' }}>
+                {stats.mediumCount} Medium
+              </span>
+              <span className="font-medium" style={{ color: '#FF375F' }}>
+                {stats.hardCount} Hard
+              </span>
+              <span style={{ color: '#3e3e3e' }}>·</span>
+              <span style={{ color: 'rgba(235,235,245,0.45)' }}>
+                {stats.totalCount} total problems
+              </span>
             </div>
 
+            {/* Progress bar — only for logged-in users */}
             {session?.user && stats.totalCount > 0 && (
-              <div className="mt-3 max-w-xs">
-                <p className="text-xs text-gray-500 mb-1">Your progress</p>
-                <ProgressBar solved={solvedCount} total={stats.totalCount} />
+              <div className="max-w-sm">
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs" style={{ color: 'rgba(235,235,245,0.4)' }}>Your progress</span>
+                  <span className="text-xs tabular-nums" style={{ color: 'rgba(235,235,245,0.5)' }}>
+                    {solvedCount} / {stats.totalCount}
+                    {solvedCount > 0 && <span style={{ color: '#00B8A3' }}> · {solvedPct}%</span>}
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${solvedPct}%`, backgroundColor: '#00B8A3' }}
+                  />
+                </div>
               </div>
             )}
           </div>

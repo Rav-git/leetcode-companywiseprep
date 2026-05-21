@@ -4,7 +4,18 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #374151 transparent;
+  scrollbar-color: #3e3e3e transparent;
+}
+
+/* Fix browser autofill overriding input background color */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #fff !important;
+  -webkit-box-shadow: 0 0 0 1000px #282828 inset !important;
+  caret-color: #fff;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 *::-webkit-scrollbar {

@@ -2,7 +2,7 @@
 
 Browse real LeetCode Premium company tags, filter by time period, and track your solved problems per company — all for free.
 
-**Live:** [company-wise-code-ten.vercel.app](https://company-wise-code-ten.vercel.app)
+**Live:** [code-company-wise.vercel.app](https://code-company-wise.vercel.app)
 
 ---
 
@@ -272,8 +272,8 @@ src/
 
 ```bash
 # 1. Clone
-git clone https://github.com/your-username/company-wise-code.git
-cd company-wise-code
+git clone https://github.com/your-username/code-company-wise.git
+cd code-company-wise
 
 # 2. Install dependencies
 npm install

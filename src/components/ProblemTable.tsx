@@ -14,6 +14,13 @@ interface Props {
 
 const PAGE_SIZE = 30
 
+const DIFF_COLORS: Record<string, { active: string; activeBorder: string; activeBg: string }> = {
+  All:    { active: '#FFA116', activeBorder: 'rgba(255,161,22,0.4)',  activeBg: 'rgba(255,161,22,0.1)'  },
+  Easy:   { active: '#00B8A3', activeBorder: 'rgba(0,184,163,0.4)',   activeBg: 'rgba(0,184,163,0.1)'   },
+  Medium: { active: '#FFB800', activeBorder: 'rgba(255,184,0,0.4)',   activeBg: 'rgba(255,184,0,0.1)'   },
+  Hard:   { active: '#FF375F', activeBorder: 'rgba(255,55,95,0.4)',   activeBg: 'rgba(255,55,95,0.1)'   },
+}
+
 export default function ProblemTable({ initialProblems, slug, initialSolvedIds, initialPeriod }: Props) {
   const [problems, setProblems] = useState<Problem[]>(initialProblems)
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
@@ -55,78 +62,80 @@ export default function ProblemTable({ initialProblems, slug, initialSolvedIds, 
   const diffButtons: (Difficulty | 'All')[] = ['All', 'Easy', 'Medium', 'Hard']
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-      <div className="p-4 border-b border-gray-800">
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+      {/* Time period tabs */}
+      <div className="px-1">
         <TimePeriodSelector selected={period} onChange={handlePeriodChange} />
       </div>
 
-      <div className="p-4 flex flex-col sm:flex-row gap-3 border-b border-gray-800">
-        <div className="flex gap-2 flex-wrap">
-          {diffButtons.map(diff => (
-            <button
-              key={diff}
-              onClick={() => {
-                setDiffFilter(diff)
-                setPage(1)
-              }}
-              className={`px-3 py-1 text-sm rounded-full border transition-colors ${
-                diffFilter === diff
-                  ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
-                  : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600'
-              }`}
-            >
-              {diff}
-            </button>
-          ))}
+      {/* Filters row */}
+      <div className="px-4 py-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center" style={{ borderBottom: '1px solid #2a2a2a' }}>
+        {/* Difficulty filters */}
+        <div className="flex gap-2">
+          {diffButtons.map(diff => {
+            const isActive = diffFilter === diff
+            const c = DIFF_COLORS[diff]
+            return (
+              <button
+                key={diff}
+                onClick={() => { setDiffFilter(diff); setPage(1) }}
+                className="px-3.5 py-1 text-sm rounded-full transition-all font-medium"
+                style={{
+                  backgroundColor: isActive ? c.activeBg : 'transparent',
+                  border: `1px solid ${isActive ? c.activeBorder : '#3e3e3e'}`,
+                  color: isActive ? c.active : 'rgba(235,235,245,0.45)',
+                }}
+              >
+                {diff}
+              </button>
+            )
+          })}
         </div>
 
-        <div className="flex-1">
+        {/* Search */}
+        <div className="flex-1 w-full sm:w-auto">
           <input
             type="text"
             placeholder="Search by title or ID..."
             value={search}
-            onChange={e => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-orange-500/50"
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            className="w-full rounded-lg px-3.5 py-1.5 text-sm text-white outline-none transition-all"
+            style={{ backgroundColor: '#282828', border: '1px solid #3e3e3e' }}
+            onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
+            onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
           />
         </div>
 
-        <div className="text-sm text-gray-500 flex items-center whitespace-nowrap">
+        {/* Count */}
+        <p className="text-sm whitespace-nowrap tabular-nums" style={{ color: 'rgba(235,235,245,0.35)' }}>
           {filtered.length} problems · {solvedCount} solved
-        </div>
+        </p>
       </div>
 
+      {/* Table */}
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center py-20">
+          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#FFA116', borderTopColor: 'transparent' }} />
         </div>
       ) : (
         <>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium w-12">#</th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium w-16">ID</th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium">Title</th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium w-24">
-                    Difficulty
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium w-24">
-                    Acceptance
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs text-gray-500 font-medium w-36">
-                    Frequency
-                  </th>
-                  <th className="px-4 py-2 w-12" />
+                <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium w-12" style={{ color: 'rgba(235,235,245,0.3)' }}>#</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium w-16" style={{ color: 'rgba(235,235,245,0.3)' }}>ID</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium" style={{ color: 'rgba(235,235,245,0.3)' }}>Title</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium w-28" style={{ color: 'rgba(235,235,245,0.3)' }}>Difficulty</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium w-24" style={{ color: 'rgba(235,235,245,0.3)' }}>Acceptance</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium w-40" style={{ color: 'rgba(235,235,245,0.3)' }}>Frequency</th>
+                  <th className="px-4 py-2.5 w-12" />
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-16 text-center text-sm" style={{ color: 'rgba(235,235,245,0.3)' }}>
                       No problems found
                     </td>
                   </tr>
@@ -145,22 +154,25 @@ export default function ProblemTable({ initialProblems, slug, initialSolvedIds, 
             </table>
           </div>
 
+          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-800">
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: '1px solid #2a2a2a' }}>
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1.5 text-sm border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-3.5 py-1.5 text-sm rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{ border: '1px solid #3e3e3e', color: 'rgba(235,235,245,0.6)' }}
               >
                 Previous
               </button>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm tabular-nums" style={{ color: 'rgba(235,235,245,0.35)' }}>
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm border border-gray-700 rounded-lg text-gray-400 hover:text-white hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="px-3.5 py-1.5 text-sm rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                style={{ border: '1px solid #3e3e3e', color: 'rgba(235,235,245,0.6)' }}
               >
                 Next
               </button>
