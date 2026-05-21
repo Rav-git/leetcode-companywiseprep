@@ -32,15 +32,17 @@ export default async function Home() {
   const statsMap = new Map(statsResults.map(s => [s.slug, s]))
 
   const companiesWithStats: CompanyWithStats[] = [
-    ...priorityCompanies.map(c => ({
-      ...c,
-      ...(statsMap.get(c.slug) ?? {
-        totalCount: 0,
-        easyCount: 0,
-        mediumCount: 0,
-        hardCount: 0,
-      }),
-    })),
+    ...priorityCompanies
+      .map(c => ({
+        ...c,
+        ...(statsMap.get(c.slug) ?? {
+          totalCount: 0,
+          easyCount: 0,
+          mediumCount: 0,
+          hardCount: 0,
+        }),
+      }))
+      .sort((a, b) => b.totalCount - a.totalCount),
     ...otherCompanies.map(c => ({
       ...c,
       totalCount: 0,
