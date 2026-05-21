@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String?
+  email          String?         @unique
+  password       String?
+  image          String?
+  createdAt      DateTime        @default(now())
+  solvedProblems SolvedProblem[]
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  name      String?
+  password  String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model SolvedProblem {
+  id          String   @id @default(cuid())
+  userId      String
+  problemId   Int
+  problemSlug String
+  company     String
+  difficulty  String
+  solvedAt    DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemId, company])
+  @@index([userId, company])
+}
