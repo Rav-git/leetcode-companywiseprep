@@ -88,16 +88,13 @@ export default function VerifyPage() {
       return
     }
 
-    // Auto sign-in using stored credentials
-    const pendingPassword = sessionStorage.getItem('pending_password')
-    if (pendingPassword) {
+    // Auto sign-in using the one-time token returned by the server (no password stored)
+    if (data.signInToken) {
       const result = await signIn('credentials', {
         email,
-        password: pendingPassword,
+        signInToken: data.signInToken,
         redirect: false,
       })
-      sessionStorage.removeItem('pending_email')
-      sessionStorage.removeItem('pending_password')
       if (result?.ok) {
         router.push('/')
         router.refresh()
@@ -105,7 +102,6 @@ export default function VerifyPage() {
       }
     }
 
-    // Fallback to sign-in page if sessionStorage was cleared
     router.push('/auth/signin')
   }
 

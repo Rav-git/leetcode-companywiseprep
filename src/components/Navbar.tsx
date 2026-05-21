@@ -17,6 +17,12 @@ export default async function Navbar() {
         <div className="flex items-center gap-2">
           {session?.user ? (
             <>
+              <Link
+                href="/dashboard"
+                className="text-sm text-gray-400 hover:text-white px-3 py-1.5 transition-colors hidden sm:block"
+              >
+                Dashboard
+              </Link>
               <div className="hidden sm:flex items-center gap-2 mr-1">
                 <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 text-xs font-semibold">
                   {(session.user.name ?? session.user.email ?? 'U').charAt(0).toUpperCase()}

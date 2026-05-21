@@ -10,24 +10,89 @@ const transporter = nodemailer.createTransport({
 
 function otpEmailHtml(code: string, heading: string, subheading: string) {
   return `<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-    <div style="max-width:440px;margin:40px auto;background:#18181b;border-radius:16px;padding:36px;border:1px solid #27272a;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
-        <div style="width:36px;height:36px;background:#FFA116;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;color:#000;font-size:13px;line-height:36px;text-align:center;">LC</div>
-        <span style="color:#fff;font-weight:600;font-size:17px;vertical-align:middle;">LeetCode Companies</span>
-      </div>
-      <h2 style="color:#fff;margin:0 0 8px;font-size:22px;font-weight:700;">${heading}</h2>
-      <p style="color:#a1a1aa;margin:0 0 28px;font-size:15px;">${subheading}</p>
-      <div style="background:#09090b;border-radius:12px;padding:24px;text-align:center;margin-bottom:28px;border:1px solid #27272a;">
-        <span style="font-size:42px;font-weight:800;letter-spacing:14px;color:#FFA116;font-variant-numeric:tabular-nums;">${code}</span>
-      </div>
-      <p style="color:#71717a;font-size:13px;margin:0;line-height:1.6;">
-        This code expires in <strong style="color:#a1a1aa;">10 minutes</strong>.<br/>
-        If you didn't request this, you can safely ignore this email.
-      </p>
-    </div>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="color-scheme" content="dark"/>
+</head>
+<body style="margin:0;padding:0;background-color:#09090b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="background-color:#09090b;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation"
+          style="max-width:440px;background-color:#18181b;border-radius:16px;border:1px solid #27272a;">
+
+          <!-- Padding top -->
+          <tr><td style="height:32px;"></td></tr>
+
+          <!-- Logo row -->
+          <tr>
+            <td style="padding:0 32px;">
+              <table cellpadding="0" cellspacing="0" border="0" role="presentation">
+                <tr>
+                  <td style="width:36px;height:36px;background-color:#FFA116;border-radius:8px;text-align:center;vertical-align:middle;">
+                    <span style="font-size:12px;font-weight:800;color:#000000;line-height:36px;display:block;">LC</span>
+                  </td>
+                  <td style="padding-left:10px;vertical-align:middle;">
+                    <span style="color:#ffffff;font-weight:600;font-size:16px;">LeetCode Companies</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Spacing -->
+          <tr><td style="height:24px;"></td></tr>
+
+          <!-- Heading -->
+          <tr>
+            <td style="padding:0 32px;">
+              <h1 style="margin:0 0 8px 0;color:#ffffff;font-size:22px;font-weight:700;line-height:1.3;">${heading}</h1>
+              <p style="margin:0;color:#a1a1aa;font-size:15px;line-height:1.5;">${subheading}</p>
+            </td>
+          </tr>
+
+          <!-- Spacing -->
+          <tr><td style="height:24px;"></td></tr>
+
+          <!-- OTP box -->
+          <tr>
+            <td style="padding:0 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation"
+                style="background-color:#09090b;border-radius:12px;border:1px solid #27272a;">
+                <tr>
+                  <td align="center" style="padding:24px 16px;">
+                    <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#FFA116;font-family:'Courier New',Courier,monospace;">${code}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Spacing -->
+          <tr><td style="height:24px;"></td></tr>
+
+          <!-- Footer note -->
+          <tr>
+            <td style="padding:0 32px;">
+              <p style="margin:0;color:#71717a;font-size:13px;line-height:1.6;">
+                This code expires in <strong style="color:#a1a1aa;">10 minutes</strong>.<br/>
+                If you didn&apos;t request this, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Padding bottom -->
+          <tr><td style="height:32px;"></td></tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>`
 }
 
@@ -35,11 +100,11 @@ export async function sendOtpEmail(to: string, code: string, isResend = false) {
   await transporter.sendMail({
     from: `"LeetCode Companies" <${process.env.GMAIL_USER}>`,
     to,
-    subject: `${code} is your verification code`,
+    subject: `${code} is your LeetCode Companies verification code`,
     html: otpEmailHtml(
       code,
       isResend ? 'New verification code' : 'Verify your email',
-      isResend ? 'Here is your new code:' : 'Enter this code to complete your sign up:'
+      isResend ? 'Here is your new one-time code:' : 'Enter this code to complete your sign up:'
     ),
   })
 }

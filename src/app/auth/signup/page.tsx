@@ -38,10 +38,6 @@ export default function SignUpPage() {
       return
     }
 
-    // Store credentials temporarily for auto sign-in after OTP verification
-    sessionStorage.setItem('pending_email', email.toLowerCase().trim())
-    sessionStorage.setItem('pending_password', password)
-
     router.push(`/auth/verify?email=${encodeURIComponent(email.toLowerCase().trim())}`)
   }
 

@@ -8,13 +8,15 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  name           String?
-  email          String?         @unique
-  password       String?
-  image          String?
-  createdAt      DateTime        @default(now())
-  solvedProblems SolvedProblem[]
+  id                  String          @id @default(cuid())
+  name                String?
+  email               String?         @unique
+  password            String?
+  image               String?
+  createdAt           DateTime        @default(now())
+  signInToken         String?
+  signInTokenExpiry   DateTime?
+  solvedProblems      SolvedProblem[]
 }
 
 model OtpCode {
@@ -23,6 +25,7 @@ model OtpCode {
   name      String?
   password  String
   code      String
+  attempts  Int      @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
 

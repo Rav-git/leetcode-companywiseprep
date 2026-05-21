@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
 import prisma from '@/lib/prisma'
 import { sendOtpEmail } from '@/lib/mailer'
+import { registerLimiter, getIp } from '@/lib/ratelimit'
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
 export async function POST(req: NextRequest) {
+  if (registerLimiter) {
+    const { success } = await registerLimiter.limit(getIp(req))
+    if (!success) return NextResponse.json({ error: 'Too many requests. Try again later.' }, { status: 429 })
+  }
+
   const body = await req.json()
   const { name, email, password } = body
 
