@@ -13,19 +13,22 @@ interface Props {
 
 export default function CompanyGrid({ companies }: Props) {
   const [search, setSearch] = useState('')
-  const [solvedByCompany, setSolvedByCompany] = useState<Record<string, number>>({})
+  const [solvedByCompany, setSolvedByCompany] = useState<Record<string, number>>(
+    progressCache.getSolvedByCompany() ?? {}
+  )
   const [displayCount, setDisplayCount] = useState(BATCH)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // Cache hit: already fetched in this tab session — skip the API call entirely
+    if (progressCache.getSolvedByCompany()) return
+
     fetch('/api/user-progress')
       .then(r => r.json())
       .then(d => {
         if (!d.solvedByCompany) return
+        progressCache.setSolvedByCompany(d.solvedByCompany)
         setSolvedByCompany(d.solvedByCompany)
-
-        // Pre-warm the in-memory cache for every company the user has solved problems in.
-        // progressCache.prefetch is a no-op if the slug is already cached.
         Object.keys(d.solvedByCompany).forEach(slug => progressCache.prefetch(slug))
       })
       .catch(() => {})
