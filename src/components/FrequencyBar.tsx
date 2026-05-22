@@ -1,8 +1,8 @@
-interface Props {
+interface FrequencyBarProps {
   value: number
 }
 
-export default function FrequencyBar({ value }: Props) {
+export default function FrequencyBar({ value }: FrequencyBarProps) {
   return (
     <div className="flex items-center gap-2.5">
       <div className="w-20 rounded-full h-1.5 overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>

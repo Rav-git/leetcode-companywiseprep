@@ -1,6 +1,8 @@
 import { Problem, Difficulty } from '@/types'
 
-const COLORS = [
+// One color per company avatar — derived deterministically from the first char of the slug
+// so the same company always gets the same color without a DB lookup
+const COMPANY_AVATAR_COLORS = [
   '#4285F4', '#FF9900', '#00A4EF', '#1877F2', '#555555',
   '#F77B00', '#FF0000', '#1A1A2E', '#0A66C2', '#1DA1F2',
   '#E50914', '#FF5A5F', '#00A1E0', '#F80000', '#69C9D0',
@@ -8,7 +10,7 @@ const COLORS = [
 ]
 
 export function getCompanyColor(slug: string): string {
-  return COLORS[slug.charCodeAt(0) % COLORS.length]
+  return COMPANY_AVATAR_COLORS[slug.charCodeAt(0) % COMPANY_AVATAR_COLORS.length]
 }
 
 export function formatCompanyName(slug: string): string {

@@ -92,8 +92,9 @@ export default async function DashboardPage() {
     return true
   }).slice(0, 10)
 
-  const dateSlugs = solved.map(s => s.solvedAt.toISOString().split('T')[0])
-  const streak = calculateStreak(dateSlugs)
+  // activityDates: one ISO date string per solve record — used to calculate the daily streak
+  const activityDates = solved.map(s => s.solvedAt.toISOString().split('T')[0])
+  const streak = calculateStreak(activityDates)
 
   return (
     <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
@@ -180,7 +181,8 @@ export default async function DashboardPage() {
               <h2 className="font-semibold text-white text-sm mb-5">Top Companies Practiced</h2>
               <div className="space-y-4">
                 {topCompanies.map(([slug, count]) => {
-                  const pct = Math.round((count / (topCompanies[0][1] || 1)) * 100)
+                  // solvedPercent: normalized to the top company so bars are relative, not absolute
+                  const solvedPercent = Math.round((count / (topCompanies[0][1] || 1)) * 100)
                   return (
                     <Link key={slug} href={`/company/${slug}`} className="block group">
                       <div className="flex justify-between items-center mb-1.5">
@@ -194,7 +196,7 @@ export default async function DashboardPage() {
                       <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
                         <div
                           className="h-full rounded-full transition-all"
-                          style={{ width: `${pct}%`, backgroundColor: '#FFA116', opacity: 0.8 }}
+                          style={{ width: `${solvedPercent}%`, backgroundColor: '#FFA116', opacity: 0.8 }}
                         />
                       </div>
                     </Link>

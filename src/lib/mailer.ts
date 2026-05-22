@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
   },
 })
 
-function otpEmailHtml(code: string, heading: string, subheading: string) {
+function buildOtpEmailHtml(code: string, heading: string, subheading: string) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -96,7 +96,7 @@ function otpEmailHtml(code: string, heading: string, subheading: string) {
 </html>`
 }
 
-function reengagementHtml(firstName: string, unsubscribeUrl: string) {
+function buildReengagementEmailHtml(firstName: string, unsubscribeUrl: string) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -191,7 +191,7 @@ export async function sendReengagementEmail({ email, name }: { email: string; na
     from: `"Code Company Wise" <${process.env.GMAIL_USER}>`,
     to: email,
     subject: `${firstName}, your interview prep is waiting`,
-    html: reengagementHtml(firstName, unsubscribeUrl),
+    html: buildReengagementEmailHtml(firstName, unsubscribeUrl),
   })
 }
 
@@ -200,7 +200,7 @@ export async function sendOtpEmail(to: string, code: string, isResend = false) {
     from: `"LeetCode Companies" <${process.env.GMAIL_USER}>`,
     to,
     subject: `${code} is your LeetCode Companies verification code`,
-    html: otpEmailHtml(
+    html: buildOtpEmailHtml(
       code,
       isResend ? 'New verification code' : 'Verify your email',
       isResend ? 'Here is your new one-time code:' : 'Enter this code to complete your sign up:'

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
+import Logo from './layout/Logo'
 
 export default function Navbar() {
   const { data: session } = useSession()
@@ -9,14 +10,8 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-14 border-b" style={{ backgroundColor: '#1a1a1a', borderBottomColor: '#2a2a2a' }}>
       <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-            <rect width="64" height="64" rx="13" fill="#FFA116" />
-            <polyline points="20,20 12,32 20,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <polyline points="44,20 52,32 44,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <line x1="37" y1="20" x2="27" y2="44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" />
-          </svg>
-          <span className="font-semibold text-white hidden sm:block text-sm tracking-tight">Code Company Wise</span>
+        <Link href="/">
+          <Logo size={30} textSize="sm" />
         </Link>
 
         <div className="flex items-center gap-1">

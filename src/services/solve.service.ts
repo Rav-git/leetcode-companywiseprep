@@ -1,0 +1,18 @@
+// Central module for all /api/solve calls — keeps fetch logic out of SolveButton
+export async function markSolved(problemId: number, company: string): Promise<boolean> {
+  const res = await fetch('/api/solve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ problemId, company }),
+  })
+  return res.ok
+}
+
+export async function markUnsolved(problemId: number, company: string): Promise<boolean> {
+  const res = await fetch('/api/solve', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ problemId, company }),
+  })
+  return res.ok
+}

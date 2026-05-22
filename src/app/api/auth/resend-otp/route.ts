@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
 import { sendOtpEmail } from '@/lib/mailer'
 import { resendOtpLimiter } from '@/lib/ratelimit'
-
-function hashOtp(code: string): string {
-  return createHash('sha256').update(code).digest('hex')
-}
+import { generateOtp, hashOtp } from '@/lib/otp'
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json()
@@ -25,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No pending registration found. Please sign up again.' }, { status: 404 })
   }
 
-  const newCode = Math.floor(100000 + Math.random() * 900000).toString()
+  const newCode = generateOtp()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
   await prisma.otpCode.deleteMany({ where: { email: normalizedEmail } })

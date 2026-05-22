@@ -2,10 +2,10 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { fetchCompanyList, fetchProblems, fetchCompanyStats } from '@/lib/github'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
-import CompanyPageClient from '@/components/CompanyPageClient'
+import CompanyProgress from '@/components/CompanyProgress'
 import { TimePeriod, Problem } from '@/types'
 
-interface Props {
+interface CompanyPageProps {
   params: { slug: string }
 }
 
@@ -16,7 +16,7 @@ export async function generateStaticParams() {
   return companies.map(c => ({ slug: c.slug }))
 }
 
-export default async function CompanyPage({ params }: Props) {
+export default async function CompanyPage({ params }: CompanyPageProps) {
   const { slug } = params
 
   // Validate first (cached 86400s) before the heavier parallel fetches
@@ -87,8 +87,8 @@ export default async function CompanyPage({ params }: Props) {
               </span>
             </div>
 
-            {/* Progress bar + problem table share state via CompanyPageClient */}
-            <CompanyPageClient
+            {/* Progress bar + problem table share state via CompanyProgress */}
+            <CompanyProgress
               slug={slug}
               totalCount={stats.totalCount}
               allPeriodProblems={allPeriodProblems}

@@ -1,7 +1,8 @@
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 
-function makeRedis() {
+// Returns null when Redis env vars are absent — all limiters degrade gracefully to no-op
+function createRedisClient() {
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return null
   return new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL,
@@ -9,23 +10,23 @@ function makeRedis() {
   })
 }
 
-function makeLimiter(requests: number, window: `${number} ${'s' | 'm' | 'h' | 'd'}`) {
-  const redis = makeRedis()
+function createRateLimiter(requests: number, window: `${number} ${'s' | 'm' | 'h' | 'd'}`) {
+  const redis = createRedisClient()
   if (!redis) return null
   return new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(requests, window) })
 }
 
 // 5 sign-up attempts per hour per IP — prevents email/quota spam
-export const registerLimiter = makeLimiter(5, '1 h')
+export const registerLimiter = createRateLimiter(5, '1 h')
 
 // 10 OTP verify attempts per 10 min per IP — backs up the in-DB attempt counter
-export const verifyOtpLimiter = makeLimiter(10, '10 m')
+export const verifyOtpLimiter = createRateLimiter(10, '10 m')
 
 // 3 resend requests per 10 min per email — prevents email flooding
-export const resendOtpLimiter = makeLimiter(3, '10 m')
+export const resendOtpLimiter = createRateLimiter(3, '10 m')
 
 // 60 solve actions per minute per user — prevents DB spam
-export const solveLimiter = makeLimiter(60, '1 m')
+export const solveLimiter = createRateLimiter(60, '1 m')
 
 export function getIp(req: Request): string {
   return (

@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash, randomBytes } from 'crypto'
+import { randomBytes } from 'crypto'
 import prisma from '@/lib/prisma'
 import { verifyOtpLimiter, getIp } from '@/lib/ratelimit'
+import { hashOtp } from '@/lib/otp'
 
 const MAX_ATTEMPTS = 5
-
-function hashOtp(code: string): string {
-  return createHash('sha256').update(code).digest('hex')
-}
 
 export async function POST(req: NextRequest) {
   if (verifyOtpLimiter) {

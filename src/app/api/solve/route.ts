@@ -21,21 +21,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  await prisma.solvedProblem.upsert({
-    where: {
-      userId_problemId_company: {
+  try {
+    await prisma.solvedProblem.upsert({
+      where: {
+        userId_problemId_company: {
+          userId: session.user.id,
+          problemId: Number(problemId),
+          company,
+        },
+      },
+      update: {},
+      create: {
         userId: session.user.id,
         problemId: Number(problemId),
         company,
       },
-    },
-    update: {},
-    create: {
-      userId: session.user.id,
-      problemId: Number(problemId),
-      company,
-    },
-  })
+    })
+  } catch (err) {
+    console.error('Solve POST error:', err)
+    return NextResponse.json({ error: 'Failed to save progress' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }
@@ -54,13 +59,18 @@ export async function DELETE(req: NextRequest) {
   const body = await req.json()
   const { problemId, company } = body
 
-  await prisma.solvedProblem.deleteMany({
-    where: {
-      userId: session.user.id,
-      problemId: Number(problemId),
-      company,
-    },
-  })
+  try {
+    await prisma.solvedProblem.deleteMany({
+      where: {
+        userId: session.user.id,
+        problemId: Number(problemId),
+        company,
+      },
+    })
+  } catch (err) {
+    console.error('Solve DELETE error:', err)
+    return NextResponse.json({ error: 'Failed to update progress' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }

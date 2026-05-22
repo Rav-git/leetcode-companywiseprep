@@ -3,7 +3,7 @@ import DifficultyBadge from './DifficultyBadge'
 import FrequencyBar from './FrequencyBar'
 import SolveButton from './SolveButton'
 
-interface Props {
+interface ProblemRowProps {
   problem: Problem
   rank: number
   isSolved: boolean
@@ -11,7 +11,7 @@ interface Props {
   onSolvedToggle: (problemId: number, solved: boolean) => void
 }
 
-export default function ProblemRow({ problem, rank, isSolved, company, onSolvedToggle }: Props) {
+export default function ProblemRow({ problem, rank, isSolved, company, onSolvedToggle }: ProblemRowProps) {
   return (
     <tr
       className="transition-colors cursor-pointer group"

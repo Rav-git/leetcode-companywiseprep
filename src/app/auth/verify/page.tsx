@@ -4,13 +4,19 @@ import { useState, useRef, useEffect, Suspense, type KeyboardEvent, type Clipboa
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Logo from '@/components/layout/Logo'
+import FormAlert from '@/components/ui/FormAlert'
+import { verifyOtp, resendOtp } from '@/services/auth.service'
+import { PAGE_BG, CARD_BG, CARD_BORDER, BRAND, INPUT_BG, INPUT_BORDER } from '@/constants/theme'
 
 function VerifyContent() {
   const [digits, setDigits] = useState<string[]>(Array(6).fill(''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [resendCooldown, setResendCooldown] = useState(0)
-  const [resendMsg, setResendMsg] = useState('')
+  // cooldownTimer: seconds remaining before the user can request another OTP — prevents email flooding
+  const [cooldownTimer, setCooldownTimer] = useState(0)
+  // resendStatusMessage: success feedback shown after a resend — separate from error so both can coexist
+  const [resendStatusMessage, setResendStatusMessage] = useState('')
   const inputRefs = useRef<(HTMLInputElement | null)[]>(Array(6).fill(null))
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -21,10 +27,11 @@ function VerifyContent() {
   }, [])
 
   useEffect(() => {
-    if (resendCooldown <= 0) return
-    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000)
-    return () => clearTimeout(t)
-  }, [resendCooldown])
+    if (cooldownTimer <= 0) return
+    // Decrement once per second — setTimeout instead of setInterval avoids drift
+    const cooldownTick = setTimeout(() => setCooldownTimer(c => c - 1), 1000)
+    return () => clearTimeout(cooldownTick)
+  }, [cooldownTimer])
 
   const handleChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return
@@ -72,27 +79,21 @@ function VerifyContent() {
     setLoading(true)
     setError('')
 
-    const res = await fetch('/api/auth/verify-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, code }),
-    })
+    const result = await verifyOtp({ email, code })
 
-    const data = await res.json()
-
-    if (!res.ok) {
-      setError(data.error ?? 'Verification failed')
+    if (!result.ok) {
+      setError(result.error ?? 'Verification failed')
       setLoading(false)
       return
     }
 
-    if (data.signInToken) {
-      const result = await signIn('credentials', {
+    if (result.signInToken) {
+      const signInResult = await signIn('credentials', {
         email,
-        signInToken: data.signInToken,
+        signInToken: result.signInToken,
         redirect: false,
       })
-      if (result?.ok) {
+      if (signInResult?.ok) {
         router.push('/')
         router.refresh()
         return
@@ -103,45 +104,33 @@ function VerifyContent() {
   }
 
   const handleResend = async () => {
-    if (resendCooldown > 0) return
-    setResendMsg('')
+    if (cooldownTimer > 0) return
+    setResendStatusMessage('')
     setError('')
 
-    const res = await fetch('/api/auth/resend-otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    })
+    const result = await resendOtp(email)
 
-    if (res.ok) {
-      setResendMsg('New code sent!')
-      setResendCooldown(30)
+    if (result.ok) {
+      setResendStatusMessage('New code sent!')
+      setCooldownTimer(30)
       setDigits(Array(6).fill(''))
       inputRefs.current[0]?.focus()
     } else {
-      const data = await res.json()
-      setError(data.error ?? 'Failed to resend. Try again.')
+      setError(result.error ?? 'Failed to resend. Try again.')
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4 pt-14" style={{ backgroundColor: '#161616' }}>
+    <main className="min-h-screen flex items-center justify-center px-4 pt-14" style={{ backgroundColor: PAGE_BG }}>
       <div className="w-full max-w-sm py-12">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <svg width="34" height="34" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-            <rect width="64" height="64" rx="13" fill="#FFA116" />
-            <polyline points="20,20 12,32 20,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <polyline points="44,20 52,32 44,44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <line x1="37" y1="20" x2="27" y2="44" stroke="#161616" strokeWidth="5.5" strokeLinecap="round" />
-          </svg>
-          <span className="text-white font-semibold text-lg tracking-tight">Code Company Wise</span>
+          <Logo size={34} />
         </div>
 
-        <div className="rounded-2xl p-8" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+        <div className="rounded-2xl p-8" style={{ backgroundColor: CARD_BG, border: `1px solid ${CARD_BORDER}` }}>
           {/* Email icon */}
           <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-5" style={{ backgroundColor: 'rgba(255,161,22,0.1)', border: '1.5px solid rgba(255,161,22,0.25)' }}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#FFA116">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke={BRAND}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
@@ -150,23 +139,14 @@ function VerifyContent() {
           <p className="text-sm text-center mb-1" style={{ color: 'rgba(235,235,245,0.5)' }}>
             We sent a 6-digit code to
           </p>
-          <p className="text-sm font-medium text-center mb-7 truncate" style={{ color: '#FFA116' }}>
+          <p className="text-sm font-medium text-center mb-7 truncate" style={{ color: BRAND }}>
             {email}
           </p>
 
-          {error && (
-            <div className="text-sm rounded-xl px-4 py-3 mb-5 text-center" style={{ backgroundColor: 'rgba(255,55,95,0.08)', border: '1px solid rgba(255,55,95,0.25)', color: '#ff6b8a' }}>
-              {error}
-            </div>
-          )}
+          {error && <FormAlert variant="error" message={error} centered className="mb-5" />}
+          {resendStatusMessage && <FormAlert variant="success" message={resendStatusMessage} centered className="mb-5" />}
 
-          {resendMsg && (
-            <div className="text-sm rounded-xl px-4 py-3 mb-5 text-center" style={{ backgroundColor: 'rgba(0,184,163,0.08)', border: '1px solid rgba(0,184,163,0.25)', color: '#00B8A3' }}>
-              {resendMsg}
-            </div>
-          )}
-
-          {/* 6 OTP boxes */}
+          {/* 6 OTP digit boxes — individual inputs for better mobile UX than a single field */}
           <div className="flex gap-2 justify-center mb-6">
             {digits.map((digit, i) => (
               <input
@@ -181,17 +161,17 @@ function VerifyContent() {
                 onPaste={handlePaste}
                 className="w-11 h-12 text-center text-white text-xl font-bold rounded-lg outline-none transition-all"
                 style={{
-                  backgroundColor: '#282828',
-                  border: digit ? '1.5px solid #FFA116' : '1px solid #3e3e3e',
+                  backgroundColor: INPUT_BG,
+                  border: digit ? `1.5px solid ${BRAND}` : `1px solid ${INPUT_BORDER}`,
                   boxShadow: digit ? '0 0 0 3px rgba(255,161,22,0.1)' : 'none',
                 }}
                 onFocus={e => {
-                  e.currentTarget.style.borderColor = '#FFA116'
+                  e.currentTarget.style.borderColor = BRAND
                   e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,161,22,0.1)'
                 }}
                 onBlur={e => {
                   if (!digit) {
-                    e.currentTarget.style.borderColor = '#3e3e3e'
+                    e.currentTarget.style.borderColor = INPUT_BORDER
                     e.currentTarget.style.boxShadow = 'none'
                   }
                 }}
@@ -203,7 +183,7 @@ function VerifyContent() {
             onClick={handleVerify}
             disabled={loading || digits.join('').length < 6}
             className="w-full font-semibold py-2.5 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: '#FFA116', color: '#000' }}
+            style={{ backgroundColor: BRAND, color: '#000' }}
           >
             {loading ? 'Verifying…' : 'Verify Email'}
           </button>
@@ -213,11 +193,11 @@ function VerifyContent() {
               Didn&apos;t receive the code?{' '}
               <button
                 onClick={handleResend}
-                disabled={resendCooldown > 0}
+                disabled={cooldownTimer > 0}
                 className="font-medium transition-colors disabled:cursor-not-allowed"
-                style={{ color: resendCooldown > 0 ? 'rgba(235,235,245,0.2)' : '#FFA116' }}
+                style={{ color: cooldownTimer > 0 ? 'rgba(235,235,245,0.2)' : BRAND }}
               >
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                {cooldownTimer > 0 ? `Resend in ${cooldownTimer}s` : 'Resend code'}
               </button>
             </p>
           </div>

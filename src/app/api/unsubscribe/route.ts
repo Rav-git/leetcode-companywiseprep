@@ -17,10 +17,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/?unsubscribe=invalid', req.nextUrl.origin))
   }
 
-  await prisma.user.updateMany({
-    where: { email: email.toLowerCase() },
-    data: { emailOptOut: true },
-  })
+  try {
+    await prisma.user.updateMany({
+      where: { email: email.toLowerCase() },
+      data: { emailOptOut: true },
+    })
+  } catch (err) {
+    console.error('unsubscribe GET error:', err)
+    return NextResponse.redirect(new URL('/?unsubscribe=error', req.nextUrl.origin))
+  }
 
   return NextResponse.redirect(new URL('/?unsubscribe=success', req.nextUrl.origin))
 }

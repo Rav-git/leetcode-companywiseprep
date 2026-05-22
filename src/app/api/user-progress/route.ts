@@ -11,22 +11,27 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const company = searchParams.get('company')
 
-  if (company) {
-    const solved = await prisma.solvedProblem.findMany({
-      where: { userId: session.user.id, company },
-      select: { problemId: true },
-    })
-    const solvedIds = solved.map(s => s.problemId)
-    return NextResponse.json({ solvedCount: solvedIds.length, solvedIds })
-  }
+  try {
+    if (company) {
+      const solved = await prisma.solvedProblem.findMany({
+        where: { userId: session.user.id, company },
+        select: { problemId: true },
+      })
+      const solvedIds = solved.map(s => s.problemId)
+      return NextResponse.json({ solvedCount: solvedIds.length, solvedIds })
+    }
 
-  const solved = await prisma.solvedProblem.findMany({
-    where: { userId: session.user.id },
-    select: { company: true },
-  })
-  const solvedByCompany: Record<string, number> = {}
-  for (const s of solved) {
-    solvedByCompany[s.company] = (solvedByCompany[s.company] ?? 0) + 1
+    const solved = await prisma.solvedProblem.findMany({
+      where: { userId: session.user.id },
+      select: { company: true },
+    })
+    const solvedByCompany: Record<string, number> = {}
+    for (const s of solved) {
+      solvedByCompany[s.company] = (solvedByCompany[s.company] ?? 0) + 1
+    }
+    return NextResponse.json({ solvedByCompany })
+  } catch (err) {
+    console.error('user-progress GET error:', err)
+    return NextResponse.json({ error: 'Failed to fetch progress' }, { status: 500 })
   }
-  return NextResponse.json({ solvedByCompany })
 }

@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
-import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
 import { sendOtpEmail } from '@/lib/mailer'
 import { registerLimiter, getIp } from '@/lib/ratelimit'
-
-function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
-
-function hashOtp(code: string): string {
-  return createHash('sha256').update(code).digest('hex')
-}
+import { generateOtp, hashOtp } from '@/lib/otp'
 
 export async function POST(req: NextRequest) {
   if (registerLimiter) {

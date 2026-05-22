@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, type ChangeEvent } from 'react'
 import { Problem, TimePeriod, Difficulty } from '@/types'
 import TimePeriodSelector from './TimePeriodSelector'
 import ProblemRow from './ProblemRow'
+import Spinner from './ui/Spinner'
+import TextInput from './ui/TextInput'
 
-interface Props {
+interface ProblemTableProps {
   allPeriodProblems: Record<TimePeriod, Problem[]>
   slug: string
   initialPeriod: TimePeriod
@@ -15,19 +17,19 @@ interface Props {
 
 const PAGE_SIZE = 30
 
-const DIFF_COLORS: Record<string, { active: string; activeBorder: string; activeBg: string }> = {
+const DIFFICULTY_FILTER_COLORS: Record<string, { active: string; activeBorder: string; activeBg: string }> = {
   All:    { active: '#FFA116', activeBorder: 'rgba(255,161,22,0.4)',  activeBg: 'rgba(255,161,22,0.1)'  },
   Easy:   { active: '#00B8A3', activeBorder: 'rgba(0,184,163,0.4)',   activeBg: 'rgba(0,184,163,0.1)'   },
   Medium: { active: '#FFB800', activeBorder: 'rgba(255,184,0,0.4)',   activeBg: 'rgba(255,184,0,0.1)'   },
   Hard:   { active: '#FF375F', activeBorder: 'rgba(255,55,95,0.4)',   activeBg: 'rgba(255,55,95,0.1)'   },
 }
 
-export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: Props) {
+export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: ProblemTableProps) {
   const [problems, setProblems] = useState<Problem[]>(allPeriodProblems[initialPeriod])
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [diffFilter, setDiffFilter] = useState<Difficulty | 'All'>('All')
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | 'All'>('All')
   const [page, setPage] = useState(1)
 
   // Pre-seeded with all periods fetched at build time — every tab switch is instant
@@ -59,7 +61,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
   }
 
   const filtered = problems
-    .filter(p => diffFilter === 'All' || p.difficulty === diffFilter)
+    .filter(p => selectedDifficulty === 'All' || p.difficulty === selectedDifficulty)
     .filter(
       p =>
         search === '' ||
@@ -71,7 +73,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const solvedCount = filtered.filter(p => solvedSet.has(p.id)).length
 
-  const diffButtons: (Difficulty | 'All')[] = ['All', 'Easy', 'Medium', 'Hard']
+  const difficultyOptions: (Difficulty | 'All')[] = ['All', 'Easy', 'Medium', 'Hard']
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
@@ -84,18 +86,18 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
       <div className="px-4 py-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center" style={{ borderBottom: '1px solid #2a2a2a' }}>
         {/* Difficulty filters */}
         <div className="flex gap-2">
-          {diffButtons.map(diff => {
-            const isActive = diffFilter === diff
-            const c = DIFF_COLORS[diff]
+          {difficultyOptions.map(diff => {
+            const isActive = selectedDifficulty === diff
+            const colorConfig = DIFFICULTY_FILTER_COLORS[diff]
             return (
               <button
                 key={diff}
-                onClick={() => { setDiffFilter(diff); setPage(1) }}
+                onClick={() => { setSelectedDifficulty(diff); setPage(1) }}
                 className="px-3.5 py-1 text-sm rounded-full transition-all font-medium"
                 style={{
-                  backgroundColor: isActive ? c.activeBg : 'transparent',
-                  border: `1px solid ${isActive ? c.activeBorder : '#3e3e3e'}`,
-                  color: isActive ? c.active : 'rgba(235,235,245,0.45)',
+                  backgroundColor: isActive ? colorConfig.activeBg : 'transparent',
+                  border: `1px solid ${isActive ? colorConfig.activeBorder : '#3e3e3e'}`,
+                  color: isActive ? colorConfig.active : 'rgba(235,235,245,0.45)',
                 }}
               >
                 {diff}
@@ -106,15 +108,10 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
 
         {/* Search */}
         <div className="flex-1 w-full sm:w-auto">
-          <input
-            type="text"
-            placeholder="Search by title or ID..."
+          <TextInput
             value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
-            className="w-full rounded-lg px-3.5 py-1.5 text-sm text-white outline-none transition-all"
-            style={{ backgroundColor: '#282828', border: '1px solid #3e3e3e' }}
-            onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
-            onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setPage(1) }}
+            placeholder="Search by title or ID..."
           />
         </div>
 
@@ -127,7 +124,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
       {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#FFA116', borderTopColor: 'transparent' }} />
+          <Spinner size="md" color="brand" />
         </div>
       ) : (
         <>

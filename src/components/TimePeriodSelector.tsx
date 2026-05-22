@@ -2,14 +2,14 @@
 
 import { TimePeriod, TIME_PERIOD_LABELS } from '@/types'
 
-interface Props {
+interface TimePeriodSelectorProps {
   selected: TimePeriod
   onChange: (p: TimePeriod) => void
 }
 
 const PERIODS = Object.keys(TIME_PERIOD_LABELS) as TimePeriod[]
 
-export default function TimePeriodSelector({ selected, onChange }: Props) {
+export default function TimePeriodSelector({ selected, onChange }: TimePeriodSelectorProps) {
   return (
     <div className="flex overflow-x-auto scrollbar-none" style={{ borderBottom: '1px solid #2a2a2a' }}>
       {PERIODS.map(period => (

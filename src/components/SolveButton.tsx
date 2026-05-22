@@ -3,30 +3,34 @@
 import { useState, useEffect, type MouseEvent } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { markSolved, markUnsolved } from '@/services/solve.service'
 
-interface Props {
+interface SolveButtonProps {
   problemId: number
   company: string
   initialSolved: boolean
   onToggle: (solved: boolean) => void
 }
 
-export default function SolveButton({ problemId, company, initialSolved, onToggle }: Props) {
+export default function SolveButton({ problemId, company, initialSolved, onToggle }: SolveButtonProps) {
   const [solved, setSolved] = useState(initialSolved)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    // Don't overwrite optimistic state mid-request — only sync when idle
     if (!loading) setSolved(initialSolved)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSolved])
+
   const { data: session } = useSession()
   const router = useRouter()
 
-  const handleClick = async (e: MouseEvent<HTMLButtonElement>) => {
+  const handleSolveToggle = async (e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
 
     if (!session) {
-      router.push('/api/auth/signin')
+      // /api/auth/signin is the NextAuth internal handler, not the UI page
+      router.push('/auth/signin')
       return
     }
 
@@ -35,12 +39,11 @@ export default function SolveButton({ problemId, company, initialSolved, onToggl
     setLoading(true)
 
     try {
-      const res = await fetch('/api/solve', {
-        method: newSolved ? 'POST' : 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problemId, company }),
-      })
-      if (res.ok) {
+      const ok = newSolved
+        ? await markSolved(problemId, company)
+        : await markUnsolved(problemId, company)
+
+      if (ok) {
         onToggle(newSolved)
       } else {
         setSolved(!newSolved)
@@ -54,7 +57,7 @@ export default function SolveButton({ problemId, company, initialSolved, onToggl
 
   return (
     <button
-      onClick={handleClick}
+      onClick={handleSolveToggle}
       disabled={loading}
       title={solved ? 'Mark as unsolved' : 'Mark as solved'}
       className="flex items-center justify-center w-7 h-7 rounded-full transition-all disabled:opacity-50"

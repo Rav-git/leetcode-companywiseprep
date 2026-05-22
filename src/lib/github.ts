@@ -1,7 +1,7 @@
 import { parseCSV, formatCompanyName } from './utils'
 import { Company, CompanyWithStats, Problem, TimePeriod } from '@/types'
 
-const BASE_RAW =
+const GITHUB_RAW_BASE_URL =
   'https://raw.githubusercontent.com/snehasishroy/leetcode-companywise-interview-questions/master'
 
 export async function fetchCompanyList(): Promise<Company[]> {
@@ -32,7 +32,7 @@ export async function fetchCompanyList(): Promise<Company[]> {
 
 export async function fetchProblems(slug: string, period: TimePeriod): Promise<Problem[]> {
   try {
-    const url = `${BASE_RAW}/${slug}/${period}.csv`
+    const url = `${GITHUB_RAW_BASE_URL}/${slug}/${period}.csv`
     const res = await fetch(url, { next: { revalidate: 3600 } })
     if (!res.ok) return []
     const text = await res.text()

@@ -7,22 +7,23 @@ import { CompanyWithStats } from '@/types'
 import { getCompanyColor } from '@/lib/utils'
 import { progressCache } from '@/lib/progress-cache'
 
-interface Props {
+interface CompanyCardProps {
   company: CompanyWithStats
   solvedCount: number
 }
 
-export default function CompanyCard({ company, solvedCount }: Props) {
+export default function CompanyCard({ company, solvedCount }: CompanyCardProps) {
   const color = getCompanyColor(company.slug)
   const { totalCount, easyCount, mediumCount, hardCount } = company
   const total = (easyCount + mediumCount + hardCount) || 1
-  const solvedPct = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
+  const solvedPercent = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
 
   const router = useRouter()
-  const prefetched = useRef(false)
+  // hasPrefetched guards against duplicate prefetch calls on repeated mouseenter
+  const hasPrefetched = useRef(false)
   const handleMouseEnter = () => {
-    if (prefetched.current) return
-    prefetched.current = true
+    if (hasPrefetched.current) return
+    hasPrefetched.current = true
     router.prefetch(`/company/${company.slug}`)
     progressCache.prefetch(company.slug)
   }
@@ -102,7 +103,7 @@ export default function CompanyCard({ company, solvedCount }: Props) {
               <div className="h-1 bg-[#2a2a2a] rounded-full overflow-hidden -mt-1">
                 <div
                   className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${solvedPct}%`, backgroundColor: '#00B8A3' }}
+                  style={{ width: `${solvedPercent}%`, backgroundColor: '#00B8A3' }}
                 />
               </div>
             )}

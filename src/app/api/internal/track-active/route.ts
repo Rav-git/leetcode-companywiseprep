@@ -9,10 +9,15 @@ export async function POST(req: NextRequest) {
   const { userId } = await req.json()
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { lastActiveAt: new Date() },
-  })
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveAt: new Date() },
+    })
+  } catch (err) {
+    console.error('track-active POST error:', err)
+    return NextResponse.json({ error: 'Failed to update activity' }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }

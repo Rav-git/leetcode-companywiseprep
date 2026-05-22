@@ -1,42 +1,45 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { CompanyWithStats } from '@/types'
 import CompanyCard from './CompanyCard'
+import Spinner from './ui/Spinner'
+import TextInput from './ui/TextInput'
 import { progressCache } from '@/lib/progress-cache'
+import { fetchAllCompanyProgress } from '@/services/progress.service'
 
-const BATCH = 50
+// 50 cards per batch — enough to fill a wide viewport without over-rendering on first load
+const CARDS_PER_BATCH = 50
 
-interface Props {
+interface CompanyGridProps {
   companies: CompanyWithStats[]
 }
 
-export default function CompanyGrid({ companies }: Props) {
+export default function CompanyGrid({ companies }: CompanyGridProps) {
   const [search, setSearch] = useState('')
   const [solvedByCompany, setSolvedByCompany] = useState<Record<string, number>>(
     progressCache.getSolvedByCompany() ?? {}
   )
-  const [displayCount, setDisplayCount] = useState(BATCH)
+  const [displayCount, setDisplayCount] = useState(CARDS_PER_BATCH)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Cache hit: already fetched in this tab session — skip the API call entirely
     if (progressCache.getSolvedByCompany()) return
 
-    fetch('/api/user-progress')
-      .then(r => r.json())
-      .then(d => {
-        if (!d.solvedByCompany) return
-        progressCache.setSolvedByCompany(d.solvedByCompany)
-        setSolvedByCompany(d.solvedByCompany)
-        Object.keys(d.solvedByCompany).forEach(slug => progressCache.prefetch(slug))
+    fetchAllCompanyProgress()
+      .then(progressData => {
+        progressCache.setSolvedByCompany(progressData)
+        setSolvedByCompany(progressData)
+        // Prefetch detail cache for every company the user has solved at least one problem in
+        Object.keys(progressData).forEach(slug => progressCache.prefetch(slug))
       })
       .catch(() => {})
   }, [])
 
   // Reset visible window whenever the search query changes
   useEffect(() => {
-    setDisplayCount(BATCH)
+    setDisplayCount(CARDS_PER_BATCH)
   }, [search])
 
   // Load next batch when the sentinel scrolls into view
@@ -47,7 +50,7 @@ export default function CompanyGrid({ companies }: Props) {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setDisplayCount(prev => prev + BATCH)
+          setDisplayCount(prev => prev + CARDS_PER_BATCH)
         }
       },
       { rootMargin: '300px' } // start loading 300px before the bottom edge
@@ -67,16 +70,13 @@ export default function CompanyGrid({ companies }: Props) {
   return (
     <div>
       <div className="flex items-center gap-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search companies..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 max-w-sm rounded-lg px-4 py-2 text-sm text-white outline-none transition-all"
-          style={{ backgroundColor: '#282828', border: '1px solid #3e3e3e' }}
-          onFocus={e => (e.currentTarget.style.borderColor = '#FFA116')}
-          onBlur={e => (e.currentTarget.style.borderColor = '#3e3e3e')}
-        />
+        <div className="flex-1 max-w-sm">
+          <TextInput
+            value={search}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+            placeholder="Search companies..."
+          />
+        </div>
         <p className="text-sm whitespace-nowrap" style={{ color: 'rgba(235,235,245,0.35)' }}>
           {search
             ? `${filtered.length} result${filtered.length !== 1 ? 's' : ''}`
@@ -97,9 +97,7 @@ export default function CompanyGrid({ companies }: Props) {
       {/* Sentinel — triggers next batch load when scrolled into view */}
       {hasMore && (
         <div ref={sentinelRef} className="flex justify-center pt-8 pb-4">
-          <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: '#3e3e3e', borderTopColor: 'transparent' }}
-          />
+          <Spinner size="sm" color="muted" />
         </div>
       )}
     </div>
