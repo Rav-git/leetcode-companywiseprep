@@ -16,7 +16,7 @@ export default function CompanyCard({ company, solvedCount }: Props) {
   const solvedPct = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
 
   return (
-    <Link href={`/company/${company.slug}`}>
+    <Link href={`/company/${company.slug}`} prefetch={false}>
       <div
         className="group relative bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4 hover:border-[#FFA116]/40 hover:bg-[#1e1e1e] transition-all duration-200 cursor-pointer h-full flex flex-col gap-3"
         style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
