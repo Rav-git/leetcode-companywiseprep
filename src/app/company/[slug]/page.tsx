@@ -46,7 +46,7 @@ export default async function CompanyPage({ params }: Props) {
         {/* Back link */}
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-sm mb-7 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm mb-7 px-3 py-2 -ml-3 rounded-lg transition-colors hover:bg-white/5"
           style={{ color: 'rgba(235,235,245,0.45)' }}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

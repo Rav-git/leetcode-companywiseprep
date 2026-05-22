@@ -1,8 +1,11 @@
 'use client'
 
+import { useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CompanyWithStats } from '@/types'
 import { getCompanyColor } from '@/lib/utils'
+import { progressCache } from '@/lib/progress-cache'
 
 interface Props {
   company: CompanyWithStats
@@ -15,8 +18,17 @@ export default function CompanyCard({ company, solvedCount }: Props) {
   const total = (easyCount + mediumCount + hardCount) || 1
   const solvedPct = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
 
+  const router = useRouter()
+  const prefetched = useRef(false)
+  const handleMouseEnter = () => {
+    if (prefetched.current) return
+    prefetched.current = true
+    router.prefetch(`/company/${company.slug}`)
+    progressCache.prefetch(company.slug)
+  }
+
   return (
-    <Link href={`/company/${company.slug}`} prefetch={false}>
+    <Link href={`/company/${company.slug}`} prefetch={false} onMouseEnter={handleMouseEnter}>
       <div
         className="group relative bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4 hover:border-[#FFA116]/40 hover:bg-[#1e1e1e] transition-all duration-200 cursor-pointer h-full flex flex-col gap-3"
         style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
