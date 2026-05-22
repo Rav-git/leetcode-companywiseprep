@@ -1,16 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CompanyWithStats } from '@/types'
 import CompanyCard from './CompanyCard'
 
 interface Props {
   companies: CompanyWithStats[]
-  solvedByCompany: Record<string, number>
 }
 
-export default function CompanyGrid({ companies, solvedByCompany }: Props) {
+export default function CompanyGrid({ companies }: Props) {
   const [search, setSearch] = useState('')
+  const [solvedByCompany, setSolvedByCompany] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    fetch('/api/user-progress')
+      .then(r => r.json())
+      .then(d => { if (d.solvedByCompany) setSolvedByCompany(d.solvedByCompany) })
+      .catch(() => {})
+  }, [])
 
   const filtered = companies.filter(
     c => search === '' || c.name.toLowerCase().includes(search.toLowerCase())

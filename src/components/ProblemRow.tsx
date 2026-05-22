@@ -8,9 +8,10 @@ interface Props {
   rank: number
   isSolved: boolean
   company: string
+  onSolvedToggle: (problemId: number, solved: boolean) => void
 }
 
-export default function ProblemRow({ problem, rank, isSolved, company }: Props) {
+export default function ProblemRow({ problem, rank, isSolved, company, onSolvedToggle }: Props) {
   return (
     <tr
       className="transition-colors cursor-pointer group"
@@ -53,6 +54,7 @@ export default function ProblemRow({ problem, rank, isSolved, company }: Props) 
           company={company}
           difficulty={problem.difficulty}
           initialSolved={isSolved}
+          onToggle={(solved) => onSolvedToggle(problem.id, solved)}
         />
       </td>
     </tr>

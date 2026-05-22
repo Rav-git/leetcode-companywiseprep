@@ -1,6 +1,4 @@
 import { fetchCompanyList, fetchCompanyStats } from '@/lib/github'
-import { auth } from '@/lib/auth'
-import prisma from '@/lib/prisma'
 import { CompanyWithStats } from '@/types'
 import CompanyGrid from '@/components/CompanyGrid'
 
@@ -18,50 +16,28 @@ const PRIORITY_SLUGS = [
 ]
 
 export default async function Home() {
-  const [allCompanies, session] = await Promise.all([fetchCompanyList(), auth()])
+  const allCompanies = await fetchCompanyList()
 
-  const prioritySet = new Set(PRIORITY_SLUGS)
-  const priorityCompanies = allCompanies.filter(c => prioritySet.has(c.slug))
-  const otherCompanies = allCompanies.filter(c => !prioritySet.has(c.slug))
-
+  // Fetch stats for every company at build/revalidation time — no GitHub calls at runtime
   const statsResults = await Promise.all(
-    priorityCompanies.map(c =>
+    allCompanies.map(c =>
       fetchCompanyStats(c.slug).then(stats => ({ slug: c.slug, ...stats }))
     )
   )
   const statsMap = new Map(statsResults.map(s => [s.slug, s]))
 
-  const companiesWithStats: CompanyWithStats[] = [
-    ...priorityCompanies
-      .map(c => ({
-        ...c,
-        ...(statsMap.get(c.slug) ?? {
-          totalCount: 0,
-          easyCount: 0,
-          mediumCount: 0,
-          hardCount: 0,
-        }),
-      }))
-      .sort((a, b) => b.totalCount - a.totalCount),
-    ...otherCompanies.map(c => ({
-      ...c,
-      totalCount: 0,
-      easyCount: 0,
-      mediumCount: 0,
-      hardCount: 0,
-    })),
-  ]
+  const prioritySet = new Set(PRIORITY_SLUGS)
 
-  let solvedByCompany: Record<string, number> = {}
-  if (session?.user?.id) {
-    const solved = await prisma.solvedProblem.findMany({
-      where: { userId: session.user.id },
-      select: { company: true },
-    })
-    for (const s of solved) {
-      solvedByCompany[s.company] = (solvedByCompany[s.company] ?? 0) + 1
-    }
-  }
+  const companiesWithStats: CompanyWithStats[] = [
+    ...allCompanies
+      .filter(c => prioritySet.has(c.slug))
+      .map(c => ({ ...c, ...(statsMap.get(c.slug) ?? { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }) }))
+      .sort((a, b) => b.totalCount - a.totalCount),
+    ...allCompanies
+      .filter(c => !prioritySet.has(c.slug))
+      .map(c => ({ ...c, ...(statsMap.get(c.slug) ?? { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }) }))
+      .sort((a, b) => b.totalCount - a.totalCount),
+  ]
 
   return (
     <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
@@ -72,7 +48,7 @@ export default async function Home() {
             {allCompanies.length} companies · Real LeetCode Premium data · Feb 2026
           </p>
         </div>
-        <CompanyGrid companies={companiesWithStats} solvedByCompany={solvedByCompany} />
+        <CompanyGrid companies={companiesWithStats} />
       </div>
     </main>
   )

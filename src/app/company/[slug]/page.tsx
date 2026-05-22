@@ -1,10 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { fetchCompanyList, fetchProblemsWithFallback, fetchCompanyStats } from '@/lib/github'
-import { auth } from '@/lib/auth'
-import prisma from '@/lib/prisma'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
-import ProblemTable from '@/components/ProblemTable'
+import CompanyPageClient from '@/components/CompanyPageClient'
 
 interface Props {
   params: { slug: string }
@@ -12,34 +10,26 @@ interface Props {
 
 export const revalidate = 3600
 
+export async function generateStaticParams() {
+  const companies = await fetchCompanyList()
+  return companies.map(c => ({ slug: c.slug }))
+}
+
 export default async function CompanyPage({ params }: Props) {
   const { slug } = params
 
-  const [companies, { problems, period: initialPeriod }, stats, session] = await Promise.all([
-    fetchCompanyList(),
-    fetchProblemsWithFallback(slug),
-    fetchCompanyStats(slug),
-    auth(),
-  ])
-
+  // Validate first (cached 86400s) before the heavier parallel fetches
+  const companies = await fetchCompanyList()
   const company = companies.find(c => c.slug === slug)
   if (!company) notFound()
 
-  let solvedIdsArray: number[] = []
-  let solvedCount = 0
-
-  if (session?.user?.id) {
-    const solved = await prisma.solvedProblem.findMany({
-      where: { userId: session.user.id, company: slug },
-      select: { problemId: true },
-    })
-    solvedIdsArray = solved.map(s => s.problemId)
-    solvedCount = solved.length
-  }
+  const [{ problems, period: initialPeriod }, stats] = await Promise.all([
+    fetchProblemsWithFallback(slug),
+    fetchCompanyStats(slug),
+  ])
 
   const color = getCompanyColor(slug)
   const name = formatCompanyName(slug)
-  const solvedPct = stats.totalCount > 0 ? Math.round((solvedCount / stats.totalCount) * 100) : 0
 
   return (
     <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
@@ -57,9 +47,8 @@ export default async function CompanyPage({ params }: Props) {
           Back to companies
         </Link>
 
-        {/* Company header */}
+        {/* Company header — static, baked at build time */}
         <div className="flex flex-col sm:flex-row sm:items-start gap-5 mb-8">
-          {/* Avatar */}
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold flex-shrink-0"
             style={{
@@ -74,7 +63,6 @@ export default async function CompanyPage({ params }: Props) {
           <div className="flex-1">
             <h1 className="text-3xl font-bold text-white mb-2.5">{name}</h1>
 
-            {/* Difficulty stats */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-4">
               <span className="font-medium" style={{ color: '#00B8A3' }}>
                 {stats.easyCount} Easy
@@ -91,33 +79,15 @@ export default async function CompanyPage({ params }: Props) {
               </span>
             </div>
 
-            {/* Progress bar — only for logged-in users */}
-            {session?.user && stats.totalCount > 0 && (
-              <div className="max-w-sm">
-                <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-xs" style={{ color: 'rgba(235,235,245,0.4)' }}>Your progress</span>
-                  <span className="text-xs tabular-nums" style={{ color: 'rgba(235,235,245,0.5)' }}>
-                    {solvedCount} / {stats.totalCount}
-                    {solvedCount > 0 && <span style={{ color: '#00B8A3' }}> · {solvedPct}%</span>}
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: '#2a2a2a' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${solvedPct}%`, backgroundColor: '#00B8A3' }}
-                  />
-                </div>
-              </div>
-            )}
+            {/* Progress bar + problem table share state via CompanyPageClient */}
+            <CompanyPageClient
+              slug={slug}
+              totalCount={stats.totalCount}
+              initialProblems={problems}
+              initialPeriod={initialPeriod}
+            />
           </div>
         </div>
-
-        <ProblemTable
-          initialProblems={problems}
-          slug={slug}
-          initialSolvedIds={solvedIdsArray}
-          initialPeriod={initialPeriod}
-        />
       </div>
     </main>
   )

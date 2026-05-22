@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Problem, TimePeriod, Difficulty } from '@/types'
 import TimePeriodSelector from './TimePeriodSelector'
 import ProblemRow from './ProblemRow'
@@ -8,8 +8,9 @@ import ProblemRow from './ProblemRow'
 interface Props {
   initialProblems: Problem[]
   slug: string
-  initialSolvedIds: number[]
   initialPeriod: TimePeriod
+  solvedSet: Set<number>
+  onSolvedToggle: (problemId: number, solved: boolean) => void
 }
 
 const PAGE_SIZE = 30
@@ -21,15 +22,13 @@ const DIFF_COLORS: Record<string, { active: string; activeBorder: string; active
   Hard:   { active: '#FF375F', activeBorder: 'rgba(255,55,95,0.4)',   activeBg: 'rgba(255,55,95,0.1)'   },
 }
 
-export default function ProblemTable({ initialProblems, slug, initialSolvedIds, initialPeriod }: Props) {
+export default function ProblemTable({ initialProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: Props) {
   const [problems, setProblems] = useState<Problem[]>(initialProblems)
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [diffFilter, setDiffFilter] = useState<Difficulty | 'All'>('All')
   const [page, setPage] = useState(1)
-
-  const solvedSet = useMemo(() => new Set(initialSolvedIds), [initialSolvedIds])
 
   const handlePeriodChange = async (newPeriod: TimePeriod) => {
     setPeriod(newPeriod)
@@ -147,6 +146,7 @@ export default function ProblemTable({ initialProblems, slug, initialSolvedIds, 
                       rank={(page - 1) * PAGE_SIZE + idx + 1}
                       isSolved={solvedSet.has(problem.id)}
                       company={slug}
+                      onSolvedToggle={onSolvedToggle}
                     />
                   ))
                 )}

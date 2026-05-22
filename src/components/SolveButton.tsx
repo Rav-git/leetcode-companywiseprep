@@ -10,9 +10,10 @@ interface Props {
   company: string
   difficulty: string
   initialSolved: boolean
+  onToggle: (solved: boolean) => void
 }
 
-export default function SolveButton({ problemId, problemSlug, company, difficulty, initialSolved }: Props) {
+export default function SolveButton({ problemId, problemSlug, company, difficulty, initialSolved, onToggle }: Props) {
   const [solved, setSolved] = useState(initialSolved)
   const [loading, setLoading] = useState(false)
   const { data: session } = useSession()
@@ -36,7 +37,11 @@ export default function SolveButton({ problemId, problemSlug, company, difficult
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ problemId, problemSlug, company, difficulty }),
       })
-      if (!res.ok) setSolved(!newSolved)
+      if (res.ok) {
+        onToggle(newSolved)
+      } else {
+        setSolved(!newSolved)
+      }
     } catch {
       setSolved(!newSolved)
     } finally {
