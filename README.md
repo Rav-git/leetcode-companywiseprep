@@ -1,4 +1,4 @@
-# CompanyAce — LeetCode Company-Wise Interview Prep
+# Code Company Wise — LeetCode Company-Wise Interview Prep
 
 Browse real LeetCode Premium company tags, filter by time period, and track your solved problems per company — all for free.
 
@@ -14,12 +14,14 @@ LeetCode Premium charges $35/month to see which companies ask which problems. Th
 
 ## Features
 
-- **662+ companies** — every company in the dataset; 50 priority companies (Google, Amazon, Meta etc.) load with stats upfront, the rest lazy-load via Intersection Observer
-- **Time period filter** — switch between 30 days / 3 months / 6 months / all time per company
+- **662+ companies** — every company in the dataset with difficulty stats (Easy / Medium / Hard counts) pre-loaded at build time; no GitHub API calls at runtime
+- **All time periods pre-fetched** — 30 Days / 3 Months / 6 Months / 6+ Months / All Time problem sets are all fetched at build time per company; switching tabs is always instant with zero loading spinners
 - **Problem table** — paginated (30/page), filterable by difficulty, searchable by title or ID
 - **Frequency bar** — visual indicator of how often each problem appears in interviews
-- **Solve tracking** — mark/unmark problems as solved with optimistic UI; persists to PostgreSQL
-- **Progress bars** — per-company solved/total count on every card and detail page
+- **Solve tracking** — mark/unmark problems as solved with optimistic UI; persists to PostgreSQL; solved state (checkmarks, row highlights, "X solved" count) updates instantly without a page refresh
+- **Progress bars** — per-company progress bar on every card (home grid) and on the company detail page; both update instantly when problems are solved
+- **Instant navigation** — in-memory client cache pre-warmed on home page load; clicking any previously-solved company shows progress and checkmarks with zero delay
+- **Viewport-based rendering** — home grid renders 50 cards at a time via IntersectionObserver sentinel; remaining cards load as the user scrolls
 - **Dashboard** — total solved, Easy/Medium/Hard breakdown, top companies practiced, recent activity feed, streak counter
 - **Email OTP auth** — two-step sign-up: register → 6-digit OTP email → verify → auto sign-in (plain-text password never stored client-side)
 - **Rate limiting** — Upstash Redis sliding-window on all sensitive routes (optional, graceful no-op if not configured)
@@ -31,10 +33,10 @@ LeetCode Premium charges $35/month to see which companies ask which problems. Th
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 14 (App Router, ISR) |
+| Framework | Next.js 14 (App Router, SSG + ISR) |
 | Language | TypeScript 5 |
 | Styling | Tailwind CSS 3.4 |
-| Auth | NextAuth.js v5 beta — JWT strategy, Credentials provider |
+| Auth | NextAuth.js v5 (Auth.js) — JWT strategy, Credentials provider |
 | ORM | Prisma v5 |
 | Database | PostgreSQL (Supabase) |
 | Email | Nodemailer + Gmail SMTP |
@@ -57,35 +59,83 @@ LeetCode Premium charges $35/month to see which companies ask which problems. Th
 │  │  revalidate: 24h     │    │  revalidate: 1h             │   │
 │  └──────────┬───────────┘    └──────────────┬──────────────┘   │
 └─────────────┼──────────────────────────────-┼──────────────────┘
-              │                               │
+              │  Fetched at BUILD TIME only    │
               ▼                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      src/lib/github.ts                          │
 │                                                                 │
-│  fetchCompanyList()           fetchProblemsWithFallback()       │
-│  → parse embedded JSON        → tries: six-months              │
-│  → filter directories         →       three-months             │
-│                               →       all                      │
-│  fetchCompanyStats(slug)      fetchProblems(slug, period)       │
-│  → count Easy/Medium/Hard     → parse CSV → Problem[]          │
+│  fetchCompanyList()      fetchCompanyStats(slug)                │
+│  → parse embedded JSON   → count Easy/Medium/Hard              │
+│  → filter directories                                           │
+│                          fetchProblems(slug, period)            │
+│                          → parse CSV → Problem[]               │
 └────────────────────────────┬────────────────────────────────────┘
-                             │  Next.js ISR (server components)
-             ┌───────────────┼───────────────┐
-             ▼               ▼               ▼
-    app/page.tsx    app/company/[slug]  app/dashboard
-    (home grid)     (problem table)     (user stats)
-             │               │
-             └───────────────┴──────────────────────────┐
-                                                        │
-┌───────────────────────────┐   ┌───────────────────────▼──────┐
+                             │
+         ┌───────────────────┼─────────────────────┐
+         ▼                   ▼                     ▼
+  app/page.tsx       app/company/[slug]      app/dashboard
+  (○ static ISR)     (● SSG, 662 pages)      (dynamic, auth required)
+  revalidate 24h     revalidate 1h
+  no auth/DB         no auth/DB server-side
+         │                   │
+         │           CompanyPageClient (client)
+         │           → reads progressCache first (instant)
+         │           → fetches /api/user-progress on cache miss
+         │           → owns solvedSet + solvedCount state
+         │           → progress bar + ProblemTable share state
+         │
+  CompanyGrid (client)
+  → fetches /api/user-progress on mount (solvedByCompany counts)
+  → pre-warms progressCache for all companies with solved > 0
+  → IntersectionObserver sentinel: renders 50 cards at a time
+
+┌───────────────────────────┐   ┌──────────────────────────────┐
 │       AUTH LAYER          │   │      DATABASE LAYER           │
 │                           │   │      Supabase PostgreSQL      │
-│  NextAuth v5 — JWT        │   │                               │
+│  Auth.js v5 — JWT         │   │                               │
 │  Credentials provider     │   │  User                         │
 │  bcrypt cost 12           │   │  OtpCode                      │
-│  One-time signInToken     │   │  SolvedProblem                │
+│  trustHost: true          │   │  SolvedProblem                │
+│  One-time signInToken     │   │                               │
 │  (post-OTP auto sign-in)  │   │                               │
-└───────────────────────────┘   └───────────────────────────────┘
+└───────────────────────────┘   └──────────────────────────────┘
+```
+
+### Static Generation Strategy
+
+All GitHub data is fetched at **build time**, not at request time:
+
+| Page | Rendering | GitHub calls at runtime |
+|---|---|---|
+| `/` (home) | `○` Static ISR (revalidate 24h) | None — stats baked in |
+| `/company/[slug]` | `●` SSG via `generateStaticParams` (revalidate 1h) | None — all 5 periods baked in |
+| `/dashboard` | `ƒ` Dynamic (auth required) | None |
+
+Each company page pre-fetches all 5 time periods (30 Days, 3 Months, 6 Months, 6+ Months, All Time) in parallel at build time. The client-side period cache is pre-seeded with all of them — tab switching is always instant.
+
+User-specific data (solved counts, progress) is always fetched client-side after hydration via `/api/user-progress`, keeping static pages user-agnostic while still showing personalised state.
+
+### Client-Side Progress Cache
+
+```
+src/lib/progress-cache.ts — module-level Map, persists across navigations within the same tab
+
+Home page load
+  CompanyGrid → GET /api/user-progress
+  → { solvedByCompany: { amazon: 11, google: 3 } }
+  → progressCache.prefetch('amazon')  ← background fetch, stored in Map
+  → progressCache.prefetch('google')  ← background fetch, stored in Map
+
+User clicks Amazon
+  CompanyPageClient → progressCache.get('amazon') → HIT
+  → useState initialised with cached solvedIds instantly
+  → useEffect: cache hit → skips fetch entirely
+  → progress bar + checkmarks appear with zero delay ✓
+
+User solves a problem
+  → React state updates instantly (optimistic)
+  → progressCache.set updated in sync
+  → background: fetch(url, { cache:'reload' }) — invalidates HTTP cache for hard refresh
 ```
 
 ---
@@ -169,6 +219,7 @@ SIGN IN (returning user)
 | Email / OTP spam | Upstash rate limits: 5 reg/hr, 10 verify/10min, 3 resend/10min |
 | DB spam from solve toggle | Rate limit: 60 solve actions/min per user |
 | signInToken replay | Single-use, consumed immediately on first valid use |
+| Auth.js host validation | `trustHost: true` in config — works on Vercel and local `next start` |
 
 ---
 
@@ -176,19 +227,30 @@ SIGN IN (returning user)
 
 ```
 User clicks ✓ on a problem
-  ├── Optimistic update: UI flips to solved instantly
+  ├── Optimistic update: SolveButton flips to solved instantly
   ├── POST /api/solve { problemId, problemSlug, company, difficulty }
-  │     auth() required → prisma.solvedProblem.upsert()
+  │     auth() required → rate limit → prisma.solvedProblem.upsert()
   │     unique on (userId, problemId, company)
-  ├── Success → UI stays solved
-  └── Failure → UI reverts to unsolved
+  ├── Success
+  │     → onToggle(solved) callback fires
+  │     → CompanyPageClient.handleSolveToggle(problemId, solved)
+  │         → setSolvedSet (updates row highlight + checkmarks)
+  │         → setSolvedCount (updates progress bar count + percentage)
+  │         → progressCache.set (keeps in-memory cache in sync)
+  │         → fetch(url, { cache:'reload' }) (invalidates HTTP cache)
+  │     All UI updates are instant, no extra API call needed
+  └── Failure → SolveButton reverts to previous state
 
 User clicks ✓ again (un-solve)
   └── DELETE /api/solve → prisma.solvedProblem.deleteMany()
+        → same callback chain, decrements solvedCount
 
-On page load (server component)
-  └── SELECT company FROM SolvedProblem WHERE userId = ?
-        → Set<problemId> passed as prop to ProblemTable
+On page load (static page hydration)
+  └── CompanyPageClient mounts
+        → progressCache.get(slug) — synchronous lookup
+        → HIT: useState initialised with cached data, no fetch
+        → MISS: GET /api/user-progress?company=slug
+              → stores result in progressCache for future navigations
 ```
 
 ---
@@ -200,8 +262,8 @@ On page load (server component)
 | POST | `/api/auth/register` | — | 5/hr per IP | Create OtpCode, send OTP email |
 | POST | `/api/auth/verify-otp` | — | 10/10min per IP | Verify OTP, create User, return signInToken |
 | POST | `/api/auth/resend-otp` | — | 3/10min per email | Regenerate OTP, reset attempt counter |
-| GET | `/api/problems?slug=&period=` | — | — | Fetch problems from GitHub CSV |
-| GET | `/api/company-stats?slug=` | — | CDN cached 1h | Fetch difficulty counts for a company |
+| GET | `/api/problems?slug=&period=` | — | — | Fetch problems from GitHub CSV (used on period switch if not pre-seeded) |
+| GET | `/api/user-progress?company=` | Required | — | Return solvedIds + solvedCount for a company; omit param for solvedByCompany map |
 | POST | `/api/solve` | Required | 60/min per user | Upsert SolvedProblem |
 | DELETE | `/api/solve` | Required | 60/min per user | Delete SolvedProblem |
 
@@ -211,12 +273,14 @@ On page load (server component)
 
 | Data | Mechanism | TTL |
 |---|---|---|
-| Company list | Next.js `fetch` `revalidate` | 24 hours |
-| Problem CSV per company | Next.js `fetch` `revalidate` | 1 hour |
-| Company stats API response | `Cache-Control: s-maxage=3600, stale-while-revalidate=86400` | 1hr fresh / 24hr stale |
-| Home page (ISR) | `export const revalidate = 86400` | 24 hours |
+| Company list | Next.js `fetch` cache | 24 hours |
+| Problem CSV per company/period | Next.js `fetch` cache | 1 hour |
+| Home page (all company stats) | `export const revalidate = 86400` — full ISR | 24 hours |
+| Company detail pages (662+) | `generateStaticParams` + `revalidate = 3600` — SSG | Pre-built + 1h ISR |
+| Per-company solved progress | `progressCache` module-level Map (client) | Tab lifetime |
+| User progress (HTTP) | Client-side fetch on mount | Always fresh on cache miss |
 
-If GitHub is unavailable during a cache miss, the last cached build is served. User data in Supabase is never affected.
+All GitHub data is fetched at build time or during ISR background revalidation — never on a user's request. User data in Supabase is never affected by ISR.
 
 ---
 
@@ -225,41 +289,43 @@ If GitHub is unavailable during a cache miss, the last cached build is served. U
 ```
 src/
 ├── app/
-│   ├── page.tsx                      # Home — company grid (ISR)
+│   ├── page.tsx                      # Home — static ISR, all 662 company stats pre-loaded
 │   ├── company/[slug]/
-│   │   ├── page.tsx                  # Company detail — problem table (ISR)
+│   │   ├── page.tsx                  # Company detail — SSG, all 5 time periods pre-fetched
 │   │   └── error.tsx                 # Company-level error boundary
-│   ├── dashboard/page.tsx            # User dashboard (dynamic)
+│   ├── dashboard/page.tsx            # User dashboard (dynamic, auth required)
 │   ├── auth/
 │   │   ├── signin/page.tsx
 │   │   ├── signup/page.tsx
 │   │   └── verify/page.tsx           # 6-digit OTP input
 │   ├── api/
 │   │   ├── auth/
-│   │   │   ├── [...nextauth]/        # NextAuth handler
+│   │   │   ├── [...nextauth]/        # Auth.js handler
 │   │   │   ├── register/
 │   │   │   ├── verify-otp/
 │   │   │   └── resend-otp/
-│   │   ├── problems/
-│   │   ├── company-stats/
-│   │   └── solve/
+│   │   ├── problems/                 # GitHub CSV proxy (period switching fallback)
+│   │   ├── user-progress/            # User solved IDs + counts (client-side hydration)
+│   │   └── solve/                    # Mark / unmark solved
 │   └── error.tsx                     # Global error boundary
 ├── components/
 │   ├── Navbar.tsx                    # Server — auth-aware
-│   ├── CompanyGrid.tsx               # Client — live search + grid
-│   ├── CompanyCard.tsx               # Client — lazy stats via IntersectionObserver
-│   ├── ProblemTable.tsx              # Client — filter, search, pagination, period switching
-│   ├── ProblemRow.tsx                # Table row
-│   ├── SolveButton.tsx               # Client — optimistic solved toggle
+│   ├── CompanyGrid.tsx               # Client — search, infinite scroll, pre-warms progressCache
+│   ├── CompanyCard.tsx               # Pure render — stats from props, no lazy fetching
+│   ├── CompanyPageClient.tsx         # Client — reads progressCache; owns solvedSet + solvedCount
+│   ├── ProblemTable.tsx              # Client — filter, search, pagination; period cache pre-seeded
+│   ├── ProblemRow.tsx                # Table row — isSolved drives highlight + title color
+│   ├── SolveButton.tsx               # Client — optimistic toggle; syncs with parent solved state
 │   ├── DifficultyBadge.tsx
 │   ├── FrequencyBar.tsx
 │   ├── ProgressBar.tsx
 │   └── TimePeriodSelector.tsx
 └── lib/
-    ├── auth.ts                       # NextAuth config (JWT + Credentials)
+    ├── auth.ts                       # Auth.js config (JWT + Credentials, trustHost)
     ├── github.ts                     # GitHub data fetching + CSV parsing
     ├── mailer.ts                     # Nodemailer Gmail SMTP + HTML template
     ├── prisma.ts                     # Prisma singleton (dev hot-reload safe)
+    ├── progress-cache.ts             # Module-level Map: client-side solved progress cache
     ├── ratelimit.ts                  # Upstash Redis sliding-window limiters
     └── utils.ts                      # parseCSV, formatCompanyName, getCompanyColor
 ```
@@ -279,8 +345,8 @@ cd code-company-wise
 npm install
 
 # 3. Configure environment
-cp .env.example .env
-# Edit .env with your values (see below)
+cp .env.example .env.local
+# Edit .env.local with your values (see below)
 
 # 4. Push schema to database
 npx prisma db push
@@ -291,17 +357,21 @@ npm run dev
 
 Visit [http://localhost:3000](http://localhost:3000)
 
+> **Note:** `npm run build` fetches stats for all 662+ companies from GitHub at build time. This takes 30–90 seconds depending on your connection but only runs once per deployment.
+
 ---
 
 ## Environment Variables
 
 ```bash
 # PostgreSQL — Supabase connection string (Settings → Database → Connection string)
+# Use the transaction pooler (port 6543) for runtime; direct connection for migrations
 DATABASE_URL=""
+DIRECT_URL=""          # only needed for prisma db push / migrations
 
-# NextAuth
-NEXTAUTH_URL="http://localhost:3000"   # your domain in production
-NEXTAUTH_SECRET=""                     # generate: openssl rand -base64 32
+# Auth.js v5
+AUTH_SECRET=""         # generate: openssl rand -base64 32
+# AUTH_URL is not required — trustHost: true handles all environments
 
 # Upstash Redis — optional, rate limiting is silently skipped if not set
 # Create a free database at console.upstash.com → copy REST URL and REST Token
@@ -311,7 +381,7 @@ UPSTASH_REDIS_REST_TOKEN=""
 # Gmail SMTP
 # 1. Enable 2-Step Verification on your Google account
 # 2. Go to myaccount.google.com/apppasswords
-# 3. Create an App Password → select "Mail" → copy the 16-character password
+# 3. Create an App Password → copy the 16-character password
 GMAIL_USER="you@gmail.com"
 GMAIL_APP_PASSWORD=""
 ```
@@ -324,8 +394,13 @@ GMAIL_APP_PASSWORD=""
 
 1. Push to GitHub
 2. Import the repo in [vercel.com](https://vercel.com)
-3. Add all environment variables (set `NEXTAUTH_URL` to your Vercel domain)
-4. Deploy — `npm run build` runs `prisma generate` then `next build` automatically
+3. Add all environment variables in the Vercel dashboard
+4. Deploy — `npm run build` runs `prisma generate && next build` automatically
+
+Build output will show:
+- `○` for the home page (static ISR — no server rendering per request)
+- `●` for all 662+ company pages (SSG — pre-rendered at build time)
+- `ƒ` only for dashboard and API routes (dynamic by design)
 
 ---
 

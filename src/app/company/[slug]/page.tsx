@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { fetchCompanyList, fetchProblemsWithFallback, fetchCompanyStats } from '@/lib/github'
+import { fetchCompanyList, fetchProblems, fetchCompanyStats } from '@/lib/github'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import CompanyPageClient from '@/components/CompanyPageClient'
+import { TimePeriod, Problem } from '@/types'
 
 interface Props {
   params: { slug: string }
@@ -23,10 +24,17 @@ export default async function CompanyPage({ params }: Props) {
   const company = companies.find(c => c.slug === slug)
   if (!company) notFound()
 
-  const [{ problems, period: initialPeriod }, stats] = await Promise.all([
-    fetchProblemsWithFallback(slug),
+  const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
+  // Fetch all periods in parallel at build time — zero loading spinners when switching tabs
+  const [periodResults, stats] = await Promise.all([
+    Promise.all(ALL_PERIODS.map(p => fetchProblems(slug, p).then(probs => [p, probs] as [TimePeriod, Problem[]]))),
     fetchCompanyStats(slug),
   ])
+  const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
+
+  // Same fallback order as fetchProblemsWithFallback
+  const FALLBACK_ORDER: TimePeriod[] = ['six-months', 'three-months', 'all']
+  const initialPeriod = FALLBACK_ORDER.find(p => allPeriodProblems[p].length > 0) ?? 'all'
 
   const color = getCompanyColor(slug)
   const name = formatCompanyName(slug)
@@ -83,7 +91,7 @@ export default async function CompanyPage({ params }: Props) {
             <CompanyPageClient
               slug={slug}
               totalCount={stats.totalCount}
-              initialProblems={problems}
+              allPeriodProblems={allPeriodProblems}
               initialPeriod={initialPeriod}
             />
           </div>

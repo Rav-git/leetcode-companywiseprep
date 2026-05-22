@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Problem, TimePeriod, Difficulty } from '@/types'
 import TimePeriodSelector from './TimePeriodSelector'
 import ProblemRow from './ProblemRow'
 
 interface Props {
-  initialProblems: Problem[]
+  allPeriodProblems: Record<TimePeriod, Problem[]>
   slug: string
   initialPeriod: TimePeriod
   solvedSet: Set<number>
@@ -22,22 +22,35 @@ const DIFF_COLORS: Record<string, { active: string; activeBorder: string; active
   Hard:   { active: '#FF375F', activeBorder: 'rgba(255,55,95,0.4)',   activeBg: 'rgba(255,55,95,0.1)'   },
 }
 
-export default function ProblemTable({ initialProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: Props) {
-  const [problems, setProblems] = useState<Problem[]>(initialProblems)
+export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: Props) {
+  const [problems, setProblems] = useState<Problem[]>(allPeriodProblems[initialPeriod])
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [diffFilter, setDiffFilter] = useState<Difficulty | 'All'>('All')
   const [page, setPage] = useState(1)
 
+  // Pre-seeded with all periods fetched at build time — every tab switch is instant
+  const cache = useRef<Map<TimePeriod, Problem[]>>(new Map(Object.entries(allPeriodProblems) as [TimePeriod, Problem[]][]))
+
   const handlePeriodChange = async (newPeriod: TimePeriod) => {
-    setPeriod(newPeriod)
     setPage(1)
+
+    const cached = cache.current.get(newPeriod)
+    if (cached) {
+      setPeriod(newPeriod)
+      setProblems(cached)
+      return
+    }
+
+    setPeriod(newPeriod)
     setLoading(true)
     try {
       const res = await fetch(`/api/problems?slug=${encodeURIComponent(slug)}&period=${newPeriod}`)
       const data = await res.json()
-      setProblems(data.problems ?? [])
+      const fetched: Problem[] = data.problems ?? []
+      cache.current.set(newPeriod, fetched)
+      setProblems(fetched)
     } catch {
       // keep existing problems on error
     } finally {

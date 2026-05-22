@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type MouseEvent } from 'react'
+import { useState, useEffect, type MouseEvent } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 
@@ -16,6 +16,11 @@ interface Props {
 export default function SolveButton({ problemId, problemSlug, company, difficulty, initialSolved, onToggle }: Props) {
   const [solved, setSolved] = useState(initialSolved)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!loading) setSolved(initialSolved)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSolved])
   const { data: session } = useSession()
   const router = useRouter()
 
