@@ -6,14 +6,12 @@ import { useRouter } from 'next/navigation'
 
 interface Props {
   problemId: number
-  problemSlug: string
   company: string
-  difficulty: string
   initialSolved: boolean
   onToggle: (solved: boolean) => void
 }
 
-export default function SolveButton({ problemId, problemSlug, company, difficulty, initialSolved, onToggle }: Props) {
+export default function SolveButton({ problemId, company, initialSolved, onToggle }: Props) {
   const [solved, setSolved] = useState(initialSolved)
   const [loading, setLoading] = useState(false)
 
@@ -40,7 +38,7 @@ export default function SolveButton({ problemId, problemSlug, company, difficult
       const res = await fetch('/api/solve', {
         method: newSolved ? 'POST' : 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problemId, problemSlug, company, difficulty }),
+        body: JSON.stringify({ problemId, company }),
       })
       if (res.ok) {
         onToggle(newSolved)

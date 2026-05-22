@@ -15,9 +15,9 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { problemId, problemSlug, company, difficulty } = body
+  const { problemId, company } = body
 
-  if (!problemId || !problemSlug || !company || !difficulty) {
+  if (!problemId || !company) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
@@ -33,9 +33,7 @@ export async function POST(req: NextRequest) {
     create: {
       userId: session.user.id,
       problemId: Number(problemId),
-      problemSlug,
       company,
-      difficulty,
     },
   })
 

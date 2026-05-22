@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { fetchProblems } from '@/lib/github'
 import { formatCompanyName } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,12 @@ function calculateStreak(dates: string[]): number {
   return streak
 }
 
+const difficultyColor: Record<string, string> = {
+  Easy: '#00B8A3',
+  Medium: '#FFB800',
+  Hard: '#FF375F',
+}
+
 export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect('/auth/signin')
@@ -44,28 +51,49 @@ export default async function DashboardPage() {
     orderBy: { solvedAt: 'desc' },
   })
 
-  const total = solved.length
-  const easy = solved.filter(s => s.difficulty === 'Easy').length
-  const medium = solved.filter(s => s.difficulty === 'Medium').length
-  const hard = solved.filter(s => s.difficulty === 'Hard').length
+  // Enrich with problem metadata from GitHub (cached by Next.js fetch cache)
+  const companies = Array.from(new Set(solved.map(s => s.company)))
+  const problemMeta = new Map<number, { slug: string; title: string; difficulty: string }>()
 
-  const companyCounts: Record<string, number> = {}
+  await Promise.all(
+    companies.map(async (company) => {
+      const problems = await fetchProblems(company, 'all')
+      for (const p of problems) {
+        if (!problemMeta.has(p.id)) {
+          problemMeta.set(p.id, { slug: p.slug, title: p.title, difficulty: p.difficulty })
+        }
+      }
+    })
+  )
+
+  // Count unique problems (a problem solved in 2 companies = 1 unique solve)
+  const uniqueSolvedIds = new Set(solved.map(s => s.problemId))
+  const total = uniqueSolvedIds.size
+  const easy   = Array.from(uniqueSolvedIds).filter(id => problemMeta.get(id)?.difficulty === 'Easy').length
+  const medium = Array.from(uniqueSolvedIds).filter(id => problemMeta.get(id)?.difficulty === 'Medium').length
+  const hard   = Array.from(uniqueSolvedIds).filter(id => problemMeta.get(id)?.difficulty === 'Hard').length
+
+  // Per-company counts (unique problems per company)
+  const companyCounts: Record<string, Set<number>> = {}
   for (const s of solved) {
-    companyCounts[s.company] = (companyCounts[s.company] ?? 0) + 1
+    if (!companyCounts[s.company]) companyCounts[s.company] = new Set()
+    companyCounts[s.company].add(s.problemId)
   }
   const topCompanies = Object.entries(companyCounts)
+    .map(([slug, ids]) => [slug, ids.size] as [string, number])
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
 
-  const recent = solved.slice(0, 10)
+  // Recent: deduplicate by problemId, show each problem once (latest solve)
+  const seenIds = new Set<number>()
+  const recent = solved.filter(s => {
+    if (seenIds.has(s.problemId)) return false
+    seenIds.add(s.problemId)
+    return true
+  }).slice(0, 10)
+
   const dateSlugs = solved.map(s => s.solvedAt.toISOString().split('T')[0])
   const streak = calculateStreak(dateSlugs)
-
-  const difficultyColor: Record<string, string> = {
-    Easy: '#00B8A3',
-    Medium: '#FFB800',
-    Hard: '#FF375F',
-  }
 
   return (
     <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
@@ -97,27 +125,15 @@ export default async function DashboardPage() {
 
             {/* Difficulty breakdown */}
             <div className="flex gap-7 flex-wrap">
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#00B8A3' }} />
-                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Easy</p>
+              {[['Easy', easy, '#00B8A3'], ['Medium', medium, '#FFB800'], ['Hard', hard, '#FF375F']].map(([label, count, color]) => (
+                <div key={label as string}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: color as string }} />
+                    <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>{label}</p>
+                  </div>
+                  <p className="text-3xl font-bold tabular-nums" style={{ color: color as string }}>{count}</p>
                 </div>
-                <p className="text-3xl font-bold tabular-nums" style={{ color: '#00B8A3' }}>{easy}</p>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#FFB800' }} />
-                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Medium</p>
-                </div>
-                <p className="text-3xl font-bold tabular-nums" style={{ color: '#FFB800' }}>{medium}</p>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: '#FF375F' }} />
-                  <p className="text-xs font-medium uppercase tracking-wider" style={{ color: 'rgba(235,235,245,0.45)' }}>Hard</p>
-                </div>
-                <p className="text-3xl font-bold tabular-nums" style={{ color: '#FF375F' }}>{hard}</p>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -166,11 +182,7 @@ export default async function DashboardPage() {
                 {topCompanies.map(([slug, count]) => {
                   const pct = Math.round((count / (topCompanies[0][1] || 1)) * 100)
                   return (
-                    <Link
-                      key={slug}
-                      href={`/company/${slug}`}
-                      className="block group"
-                    >
+                    <Link key={slug} href={`/company/${slug}`} className="block group">
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-sm transition-colors" style={{ color: 'rgba(235,235,245,0.7)' }}>
                           {formatCompanyName(slug)}
@@ -195,33 +207,42 @@ export default async function DashboardPage() {
             <div className="rounded-xl p-5" style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}>
               <h2 className="font-semibold text-white text-sm mb-5">Recent Activity</h2>
               <div className="space-y-3">
-                {recent.map(s => (
-                  <div key={s.id} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: difficultyColor[s.difficulty] ?? '#888' }}
-                      />
-                      <a
-                        href={`https://leetcode.com/problems/${s.problemSlug}/`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm truncate transition-colors hover:text-white"
-                        style={{ color: 'rgba(235,235,245,0.7)' }}
-                      >
-                        {s.problemSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                      </a>
+                {recent.map(s => {
+                  const meta = problemMeta.get(s.problemId)
+                  const color = difficultyColor[meta?.difficulty ?? ''] ?? '#888'
+                  return (
+                    <div key={s.id} className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                        {meta ? (
+                          <a
+                            href={`https://leetcode.com/problems/${meta.slug}/`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm truncate transition-colors hover:text-white"
+                            style={{ color: 'rgba(235,235,245,0.7)' }}
+                          >
+                            {meta.title}
+                          </a>
+                        ) : (
+                          <span className="text-sm truncate" style={{ color: 'rgba(235,235,245,0.4)' }}>
+                            Problem #{s.problemId}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2.5 flex-shrink-0">
+                        {meta && (
+                          <span className="text-xs font-medium" style={{ color }}>
+                            {meta.difficulty}
+                          </span>
+                        )}
+                        <span className="text-xs" style={{ color: 'rgba(235,235,245,0.25)' }}>
+                          {timeAgo(s.solvedAt)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2.5 flex-shrink-0">
-                      <span className="text-xs font-medium" style={{ color: difficultyColor[s.difficulty] ?? '#888' }}>
-                        {s.difficulty}
-                      </span>
-                      <span className="text-xs" style={{ color: 'rgba(235,235,245,0.25)' }}>
-                        {timeAgo(s.solvedAt)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </div>

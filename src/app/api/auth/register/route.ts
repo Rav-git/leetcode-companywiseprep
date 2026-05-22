@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hash } from 'bcryptjs'
+import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
 import { sendOtpEmail } from '@/lib/mailer'
 import { registerLimiter, getIp } from '@/lib/ratelimit'
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+function hashOtp(code: string): string {
+  return createHash('sha256').update(code).digest('hex')
 }
 
 export async function POST(req: NextRequest) {
@@ -27,25 +32,27 @@ export async function POST(req: NextRequest) {
 
   const normalizedEmail = email.toLowerCase().trim()
 
+  // Block only if a verified account already exists
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } })
-  if (existing) {
+  if (existing?.emailVerified) {
     return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 })
   }
 
   const hashedPassword = await hash(password, 12)
   const code = generateOtp()
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
-  // Delete any existing OTP for this email and create a fresh one
+  // Upsert unverified user — safe to overwrite if they're retrying registration
+  await prisma.user.upsert({
+    where: { email: normalizedEmail },
+    update: { name: name?.trim() || null, password: hashedPassword },
+    create: { email: normalizedEmail, name: name?.trim() || null, password: hashedPassword, emailVerified: false },
+  })
+
+  // Replace any existing OTP for this email with a freshly hashed one
   await prisma.otpCode.deleteMany({ where: { email: normalizedEmail } })
   await prisma.otpCode.create({
-    data: {
-      email: normalizedEmail,
-      name: name?.trim() || null,
-      password: hashedPassword,
-      code,
-      expiresAt,
-    },
+    data: { email: normalizedEmail, codeHash: hashOtp(code), expiresAt },
   })
 
   try {

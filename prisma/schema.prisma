@@ -9,23 +9,26 @@ datasource db {
 }
 
 model User {
-  id                  String          @id @default(cuid())
-  name                String?
-  email               String?         @unique
-  password            String?
-  image               String?
-  createdAt           DateTime        @default(now())
-  signInToken         String?
-  signInTokenExpiry   DateTime?
-  solvedProblems      SolvedProblem[]
+  id                String          @id @default(cuid())
+  name              String?
+  email             String?         @unique
+  password          String?
+  emailVerified     Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  lastActiveAt      DateTime        @default(now())
+  reengageSentAt    DateTime?
+  emailOptOut       Boolean         @default(false)
+  signInToken       String?
+  signInTokenExpiry DateTime?
+  solvedProblems    SolvedProblem[]
+
+  @@index([lastActiveAt])
 }
 
 model OtpCode {
   id        String   @id @default(cuid())
   email     String
-  name      String?
-  password  String
-  code      String
+  codeHash  String
   attempts  Int      @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
@@ -34,14 +37,12 @@ model OtpCode {
 }
 
 model SolvedProblem {
-  id          String   @id @default(cuid())
-  userId      String
-  problemId   Int
-  problemSlug String
-  company     String
-  difficulty  String
-  solvedAt    DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  problemId Int
+  company   String
+  solvedAt  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, problemId, company])
   @@index([userId, company])

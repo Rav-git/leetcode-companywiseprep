@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { randomBytes } from 'crypto'
+import { createHash, randomBytes } from 'crypto'
 import prisma from '@/lib/prisma'
 import { verifyOtpLimiter, getIp } from '@/lib/ratelimit'
 
 const MAX_ATTEMPTS = 5
 
-// Prisma client needs regeneration to include `attempts` — cast until then
-type OtpRecord = {
-  id: string; email: string; name: string | null; password: string
-  code: string; attempts: number; expiresAt: Date; createdAt: Date
+function hashOtp(code: string): string {
+  return createHash('sha256').update(code).digest('hex')
 }
 
 export async function POST(req: NextRequest) {
@@ -28,13 +26,12 @@ export async function POST(req: NextRequest) {
   const record = await prisma.otpCode.findFirst({
     where: { email: normalizedEmail },
     orderBy: { createdAt: 'desc' },
-  }) as OtpRecord | null
+  })
 
   if (!record) {
     return NextResponse.json({ error: 'No verification code found. Please sign up again.' }, { status: 404 })
   }
 
-  // Check attempt limit before anything else
   if (record.attempts >= MAX_ATTEMPTS) {
     await prisma.otpCode.delete({ where: { id: record.id } })
     return NextResponse.json(
@@ -48,11 +45,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Code expired. Request a new one.' }, { status: 410 })
   }
 
-  if (record.code !== code.trim()) {
+  if (record.codeHash !== hashOtp(code.trim())) {
     const updated = await prisma.otpCode.update({
       where: { id: record.id },
       data: { attempts: { increment: 1 } },
-    }) as OtpRecord
+    })
     const remaining = MAX_ATTEMPTS - updated.attempts
     return NextResponse.json(
       { error: remaining > 0 ? `Invalid code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` : 'Invalid code. No attempts remaining.' },
@@ -60,26 +57,24 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // OTP valid — create the user
-  const user = await prisma.user.create({
-    data: {
-      email: record.email,
-      name: record.name,
-      password: record.password,
-    },
-  })
+  // OTP valid — mark the pending user as verified
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
+  if (!user) {
+    return NextResponse.json({ error: 'Account not found. Please sign up again.' }, { status: 404 })
+  }
 
-  // Generate a short-lived one-time sign-in token (no password needed client-side)
   const signInToken = randomBytes(32).toString('hex')
+
   await prisma.user.update({
     where: { id: user.id },
     data: {
+      emailVerified: true,
       signInToken,
-      signInTokenExpiry: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
+      signInTokenExpiry: new Date(Date.now() + 5 * 60 * 1000),
     },
   })
 
   await prisma.otpCode.delete({ where: { id: record.id } })
 
-  return NextResponse.json({ success: true, signInToken, email: record.email })
+  return NextResponse.json({ success: true, signInToken, email: normalizedEmail })
 }

@@ -3,10 +3,10 @@ import Credentials from 'next-auth/providers/credentials'
 import { compare } from 'bcryptjs'
 import prisma from './prisma'
 
-// Prisma client needs regeneration to include signInToken fields — cast until then
+// Prisma client needs regeneration to include new fields — cast until then
 type UserWithToken = {
   id: string; email: string | null; name: string | null
-  image: string | null; password: string | null
+  password: string | null; emailVerified: boolean
   signInToken: string | null; signInTokenExpiry: Date | null
 }
 
@@ -40,6 +40,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }) as UserWithToken | null
         if (!user) return null
 
+        // Block unverified accounts from signing in
+        if (!user.emailVerified) return null
+
         // One-time token path (post-OTP verification — no password stored client-side)
         if (credentials.signInToken) {
           const token = credentials.signInToken as string
@@ -56,7 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { id: user.id },
             data: { signInToken: null, signInTokenExpiry: null },
           })
-          return { id: user.id, email: user.email, name: user.name ?? null, image: user.image ?? null }
+          return { id: user.id, email: user.email, name: user.name ?? null, image: null }
         }
 
         // Password path (normal sign-in)
@@ -64,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await compare(credentials.password as string, user.password)
         if (!valid) return null
 
-        return { id: user.id, email: user.email, name: user.name ?? null, image: user.image ?? null }
+        return { id: user.id, email: user.email, name: user.name ?? null, image: null }
       },
     }),
   ],

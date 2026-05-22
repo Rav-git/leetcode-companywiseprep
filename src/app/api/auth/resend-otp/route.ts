@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import prisma from '@/lib/prisma'
 import { sendOtpEmail } from '@/lib/mailer'
 import { resendOtpLimiter } from '@/lib/ratelimit'
+
+function hashOtp(code: string): string {
+  return createHash('sha256').update(code).digest('hex')
+}
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json()
@@ -14,21 +19,18 @@ export async function POST(req: NextRequest) {
     if (!success) return NextResponse.json({ error: 'Too many resend requests. Wait a few minutes.' }, { status: 429 })
   }
 
-  const record = await prisma.otpCode.findFirst({
-    where: { email: normalizedEmail },
-    orderBy: { createdAt: 'desc' },
-  })
-
-  if (!record) {
+  // Verify the unverified user exists before resending
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
+  if (!user || user.emailVerified) {
     return NextResponse.json({ error: 'No pending registration found. Please sign up again.' }, { status: 404 })
   }
 
   const newCode = Math.floor(100000 + Math.random() * 900000).toString()
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
-  await (prisma.otpCode.update as Function)({
-    where: { id: record.id },
-    data: { code: newCode, expiresAt, createdAt: new Date(), attempts: 0 },
+  await prisma.otpCode.deleteMany({ where: { email: normalizedEmail } })
+  await prisma.otpCode.create({
+    data: { email: normalizedEmail, codeHash: hashOtp(newCode), expiresAt },
   })
 
   try {

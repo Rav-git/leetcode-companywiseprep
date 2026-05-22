@@ -50,9 +50,7 @@ export default function ProblemRow({ problem, rank, isSolved, company, onSolvedT
       >
         <SolveButton
           problemId={problem.id}
-          problemSlug={problem.slug}
           company={company}
-          difficulty={problem.difficulty}
           initialSolved={isSolved}
           onToggle={(solved) => onSolvedToggle(problem.id, solved)}
         />
