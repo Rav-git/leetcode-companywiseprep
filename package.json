@@ -20,6 +20,13 @@
     "react": "^18",
     "react-dom": "^18"
   },
+  "browserslist": [
+    "chrome >= 93",
+    "firefox >= 90",
+    "safari >= 15",
+    "edge >= 93",
+    "not dead"
+  ],
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

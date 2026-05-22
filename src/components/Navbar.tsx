@@ -1,8 +1,10 @@
-import Link from 'next/link'
-import { auth, signOut } from '@/lib/auth'
+'use client'
 
-export default async function Navbar() {
-  const session = await auth()
+import Link from 'next/link'
+import { useSession, signOut } from 'next-auth/react'
+
+export default function Navbar() {
+  const { data: session } = useSession()
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-14 border-b" style={{ backgroundColor: '#1a1a1a', borderBottomColor: '#2a2a2a' }}>
@@ -37,19 +39,12 @@ export default async function Navbar() {
                   {session.user.name?.split(' ')[0] ?? session.user.email}
                 </span>
               </div>
-              <form
-                action={async () => {
-                  'use server'
-                  await signOut({ redirectTo: '/' })
-                }}
+              <button
+                onClick={() => signOut({ callbackUrl: '/' })}
+                className="text-sm rounded-lg px-3 py-1.5 transition-colors text-[rgba(235,235,245,0.6)] hover:text-white border border-[#3e3e3e] hover:border-[#555]"
               >
-                <button
-                  type="submit"
-                  className="text-sm rounded-lg px-3 py-1.5 transition-colors text-[rgba(235,235,245,0.6)] hover:text-white border border-[#3e3e3e] hover:border-[#555]"
-                >
-                  Sign Out
-                </button>
-              </form>
+                Sign Out
+              </button>
             </>
           ) : (
             <>

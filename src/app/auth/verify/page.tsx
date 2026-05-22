@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, type KeyboardEvent, type ClipboardEvent } from 'react'
+import { useState, useRef, useEffect, Suspense, type KeyboardEvent, type ClipboardEvent } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function VerifyPage() {
+function VerifyContent() {
   const [digits, setDigits] = useState<string[]>(Array(6).fill(''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -234,5 +234,13 @@ export default function VerifyPage() {
         </p>
       </div>
     </main>
+  )
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense>
+      <VerifyContent />
+    </Suspense>
   )
 }
