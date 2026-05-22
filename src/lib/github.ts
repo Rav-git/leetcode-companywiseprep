@@ -56,7 +56,14 @@ export async function fetchProblemsWithFallback(
 export async function fetchCompanyStats(
   slug: string
 ): Promise<Omit<CompanyWithStats, 'slug' | 'name'>> {
-  const problems = await fetchProblems(slug, 'all')
+  // Try 'all' first (largest dataset), fall back to smaller periods for companies
+  // that don't have an all.csv in the GitHub repo
+  const STATS_FALLBACK: TimePeriod[] = ['all', 'six-months', 'three-months', 'thirty-days', 'more-than-six-months']
+  let problems: Problem[] = []
+  for (const period of STATS_FALLBACK) {
+    problems = await fetchProblems(slug, period)
+    if (problems.length > 0) break
+  }
   return {
     totalCount: problems.length,
     easyCount: problems.filter(p => p.difficulty === 'Easy').length,
