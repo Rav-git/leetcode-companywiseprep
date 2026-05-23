@@ -28,6 +28,8 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
 
   const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
 
+  // Build: preloader is warm → pure in-memory reads, zero disk/DB I/O
+  // Runtime ISR: preloader is null → fall back to unstable_cache → Prisma
   const preloadedStats = getPreloadedStats(slug)
   const [periodResults, stats] = await Promise.all([
     Promise.all(ALL_PERIODS.map(async p => {
@@ -38,6 +40,7 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
   ])
   const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
 
+  // Same fallback order as fetchProblemsWithFallback
   const FALLBACK_ORDER: TimePeriod[] = ['six-months', 'three-months', 'all']
   const initialPeriod = FALLBACK_ORDER.find(p => allPeriodProblems[p].length > 0) ?? 'all'
 

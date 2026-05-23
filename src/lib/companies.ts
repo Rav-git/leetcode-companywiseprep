@@ -2,6 +2,13 @@ import { unstable_cache } from 'next/cache'
 import prisma from './prisma'
 import { Company, CompanyWithStats, Problem, TimePeriod } from '@/types'
 
+// All functions read from your own DB — no runtime GitHub dependency.
+// GitHub CSVs are only fetched by scripts/seed.ts (once) and /api/cron/refresh-data (weekly).
+//
+// unstable_cache wraps each Prisma call in Next.js's Data Cache:
+//   - During build, identical cache keys are only hit once — 662 pages share results.
+//   - At runtime, cached for `revalidate` seconds before re-querying.
+
 export const getCompanyList = unstable_cache(
   async (): Promise<Company[]> => {
     return prisma.company.findMany({
@@ -10,52 +17,60 @@ export const getCompanyList = unstable_cache(
     })
   },
   ['company-list'],
-  { revalidate: 86400 }
+  { revalidate: 86400 }  // 24 h — company list rarely changes
 )
 
-export async function getCompanyProblems(slug: string, period: TimePeriod): Promise<Problem[]> {
-  const rows = await prisma.companyProblem.findMany({
-    where:   { company: { slug }, period },
-    orderBy: { frequency: 'desc' },
-    select: {
-      frequency: true,
-      problem: {
-        select: { id: true, titleSlug: true, title: true, difficulty: true, acceptanceRate: true },
-      },
-    },
-  })
-
-  return rows.map(r => ({
-    id:         r.problem.id,
-    url:        `https://leetcode.com/problems/${r.problem.titleSlug}/`,
-    slug:       r.problem.titleSlug,
-    title:      r.problem.title,
-    difficulty: r.problem.difficulty as Problem['difficulty'],
-    acceptance: r.problem.acceptanceRate,
-    frequency:  r.frequency,
-  }))
-}
-
-export async function getCompanyStats(slug: string): Promise<Omit<CompanyWithStats, 'slug' | 'name'>> {
-  const FALLBACK: TimePeriod[] = ['all', 'six-months', 'three-months', 'thirty-days', 'more-than-six-months']
-
-  for (const period of FALLBACK) {
+export const getCompanyProblems = unstable_cache(
+  async (slug: string, period: TimePeriod): Promise<Problem[]> => {
     const rows = await prisma.companyProblem.findMany({
-      where:  { company: { slug }, period },
-      select: { problem: { select: { difficulty: true } } },
+      where:   { company: { slug }, period },
+      orderBy: { frequency: 'desc' },
+      select: {
+        frequency: true,
+        problem: {
+          select: { id: true, titleSlug: true, title: true, difficulty: true, acceptanceRate: true },
+        },
+      },
     })
-    if (rows.length === 0) continue
 
-    return {
-      totalCount:  rows.length,
-      easyCount:   rows.filter(r => r.problem.difficulty === 'Easy').length,
-      mediumCount: rows.filter(r => r.problem.difficulty === 'Medium').length,
-      hardCount:   rows.filter(r => r.problem.difficulty === 'Hard').length,
+    return rows.map(r => ({
+      id:         r.problem.id,
+      url:        `https://leetcode.com/problems/${r.problem.titleSlug}/`,
+      slug:       r.problem.titleSlug,
+      title:      r.problem.title,
+      difficulty: r.problem.difficulty as Problem['difficulty'],
+      acceptance: r.problem.acceptanceRate,
+      frequency:  r.frequency,
+    }))
+  },
+  ['company-problems'],
+  { revalidate: 3600 }   // 1 h — matches page revalidate
+)
+
+export const getCompanyStats = unstable_cache(
+  async (slug: string): Promise<Omit<CompanyWithStats, 'slug' | 'name'>> => {
+    const FALLBACK: TimePeriod[] = ['all', 'six-months', 'three-months', 'thirty-days', 'more-than-six-months']
+
+    for (const period of FALLBACK) {
+      const rows = await prisma.companyProblem.findMany({
+        where:  { company: { slug }, period },
+        select: { problem: { select: { difficulty: true } } },
+      })
+      if (rows.length === 0) continue
+
+      return {
+        totalCount:  rows.length,
+        easyCount:   rows.filter(r => r.problem.difficulty === 'Easy').length,
+        mediumCount: rows.filter(r => r.problem.difficulty === 'Medium').length,
+        hardCount:   rows.filter(r => r.problem.difficulty === 'Hard').length,
+      }
     }
-  }
 
-  return { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }
-}
+    return { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }
+  },
+  ['company-stats'],
+  { revalidate: 3600 }
+)
 
 // ONE query for all 662 companies — replaces the 662-call Promise.all loop on the home page.
 // Counts DISTINCT problems per company across all periods so each problem is counted once.
