@@ -63,16 +63,20 @@ export function getPreloadedProblems(slug: string, period: TimePeriod): Problem[
 export function getPreloadedStats(slug: string): { totalCount: number; easyCount: number; mediumCount: number; hardCount: number } | null {
   const cache = loadCache()
   if (!cache) return null
-  const FALLBACK: TimePeriod[] = ['six-months', 'three-months', 'all', 'thirty-days', 'more-than-six-months']
-  for (const period of FALLBACK) {
+
+  // Count DISTINCT problems across all periods — matches the home page card count
+  const distinct = new Map<number, Problem>()
+  const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
+  for (const period of ALL_PERIODS) {
     const problems = cache[`${slug}:${period}`]
-    if (!problems?.length) continue
-    return {
-      totalCount:  problems.length,
-      easyCount:   problems.filter(p => p.difficulty === 'Easy').length,
-      mediumCount: problems.filter(p => p.difficulty === 'Medium').length,
-      hardCount:   problems.filter(p => p.difficulty === 'Hard').length,
-    }
+    if (problems) problems.forEach(p => distinct.set(p.id, p))
   }
-  return { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }
+
+  const all = Array.from(distinct.values())
+  return {
+    totalCount:  all.length,
+    easyCount:   all.filter(p => p.difficulty === 'Easy').length,
+    mediumCount: all.filter(p => p.difficulty === 'Medium').length,
+    hardCount:   all.filter(p => p.difficulty === 'Hard').length,
+  }
 }

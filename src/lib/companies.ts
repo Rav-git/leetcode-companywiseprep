@@ -49,24 +49,29 @@ export const getCompanyProblems = unstable_cache(
 
 export const getCompanyStats = unstable_cache(
   async (slug: string): Promise<Omit<CompanyWithStats, 'slug' | 'name'>> => {
-    const FALLBACK: TimePeriod[] = ['all', 'six-months', 'three-months', 'thirty-days', 'more-than-six-months']
-
-    for (const period of FALLBACK) {
-      const rows = await prisma.companyProblem.findMany({
-        where:  { company: { slug }, period },
-        select: { problem: { select: { difficulty: true } } },
-      })
-      if (rows.length === 0) continue
-
-      return {
-        totalCount:  rows.length,
-        easyCount:   rows.filter(r => r.problem.difficulty === 'Easy').length,
-        mediumCount: rows.filter(r => r.problem.difficulty === 'Medium').length,
-        hardCount:   rows.filter(r => r.problem.difficulty === 'Hard').length,
-      }
+    const rows = await prisma.$queryRaw<Array<{
+      totalCount:  bigint
+      easyCount:   bigint
+      mediumCount: bigint
+      hardCount:   bigint
+    }>>`
+      SELECT
+        COUNT(DISTINCT cp."problemId")                                              AS "totalCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Easy'   THEN cp."problemId" END)  AS "easyCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Medium' THEN cp."problemId" END)  AS "mediumCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Hard'   THEN cp."problemId" END)  AS "hardCount"
+      FROM "Company" c
+      JOIN "CompanyProblem" cp ON cp."companyId" = c.id
+      JOIN "Problem"        p  ON p.id           = cp."problemId"
+      WHERE c.slug = ${slug}
+    `
+    const r = rows[0]
+    return {
+      totalCount:  Number(r?.totalCount  ?? 0),
+      easyCount:   Number(r?.easyCount   ?? 0),
+      mediumCount: Number(r?.mediumCount ?? 0),
+      hardCount:   Number(r?.hardCount   ?? 0),
     }
-
-    return { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }
   },
   ['company-stats'],
   { revalidate: 3600 }
