@@ -120,7 +120,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
             onClick={() => {
               if (status !== 'authenticated') { router.push('/auth/signin'); return }
               setShowUnsolved(v => !v); setPage(1)
-            }}
+            }} 
             className="px-3.5 py-1 text-sm rounded-full transition-all font-medium"
             style={{
               backgroundColor: showUnsolved ? 'rgba(255,55,95,0.1)' : 'transparent',
