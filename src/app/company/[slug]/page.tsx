@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getTopCompanySlugs, getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
+import { getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
+import { preloadAllCompanyData, getPreloadedProblems, getPreloadedStats } from '@/lib/build-preloader'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import CompanyProgress from '@/components/CompanyProgress'
 import { TimePeriod, Problem } from '@/types'
@@ -12,8 +13,9 @@ interface CompanyPageProps {
 export const revalidate = 3600
 
 export async function generateStaticParams() {
-  const slugs = await getTopCompanySlugs(10)
-  return slugs.map(slug => ({ slug }))
+  await preloadAllCompanyData()
+  const companies = await getCompanyList()
+  return companies.map((c: { slug: string }) => ({ slug: c.slug }))
 }
 
 export default async function CompanyPage({ params }: CompanyPageProps) {
@@ -24,9 +26,16 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
   if (!company) notFound()
 
   const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
+
+  // Build: preloader Map is warm — pure memory reads, zero DB/disk I/O per page.
+  // Runtime ISR: preloader is null — falls back to direct Prisma queries.
+  const preloadedStats = getPreloadedStats(slug)
   const [periodResults, stats] = await Promise.all([
-    Promise.all(ALL_PERIODS.map(p => getCompanyProblems(slug, p).then((probs: Problem[]) => [p, probs] as [TimePeriod, Problem[]]))),
-    getCompanyStats(slug),
+    Promise.all(ALL_PERIODS.map(async p => {
+      const probs: Problem[] = getPreloadedProblems(slug, p) ?? await getCompanyProblems(slug, p)
+      return [p, probs] as [TimePeriod, Problem[]]
+    })),
+    preloadedStats ? Promise.resolve(preloadedStats) : getCompanyStats(slug),
   ])
   const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
 
@@ -40,7 +49,6 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
     <main className="min-h-screen pt-14" style={{ backgroundColor: '#161616' }}>
       <div className="max-w-7xl mx-auto px-4 py-8">
 
-        {/* Back link */}
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 text-sm mb-7 px-3 py-2 -ml-3 rounded-lg transition-colors hover:bg-white/5"
