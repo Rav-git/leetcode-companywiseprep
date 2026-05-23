@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
-import { preloadAllCompanyData, getPreloadedProblems, getPreloadedStats } from '@/lib/build-preloader'
+import { getTopCompanySlugs, getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import CompanyProgress from '@/components/CompanyProgress'
 import { TimePeriod, Problem } from '@/types'
@@ -13,34 +12,24 @@ interface CompanyPageProps {
 export const revalidate = 3600
 
 export async function generateStaticParams() {
-  await preloadAllCompanyData()
-  const companies = await getCompanyList()
-  return companies.map((c: { slug: string }) => ({ slug: c.slug }))
+  const slugs = await getTopCompanySlugs(10)
+  return slugs.map(slug => ({ slug }))
 }
 
 export default async function CompanyPage({ params }: CompanyPageProps) {
   const { slug } = params
 
-  // Validate first (cached 86400s) before the heavier parallel fetches
   const companies = await getCompanyList()
   const company = companies.find((c: { slug: string }) => c.slug === slug)
   if (!company) notFound()
 
   const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
-
-  // Build: preloader is warm → pure in-memory reads, zero disk/DB I/O
-  // Runtime ISR: preloader is null → fall back to unstable_cache → Prisma
-  const preloadedStats = getPreloadedStats(slug)
   const [periodResults, stats] = await Promise.all([
-    Promise.all(ALL_PERIODS.map(async p => {
-      const probs: Problem[] = getPreloadedProblems(slug, p) ?? await getCompanyProblems(slug, p)
-      return [p, probs] as [TimePeriod, Problem[]]
-    })),
-    preloadedStats ? Promise.resolve(preloadedStats) : getCompanyStats(slug),
+    Promise.all(ALL_PERIODS.map(p => getCompanyProblems(slug, p).then((probs: Problem[]) => [p, probs] as [TimePeriod, Problem[]]))),
+    getCompanyStats(slug),
   ])
   const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
 
-  // Same fallback order as fetchProblemsWithFallback
   const FALLBACK_ORDER: TimePeriod[] = ['six-months', 'three-months', 'all']
   const initialPeriod = FALLBACK_ORDER.find(p => allPeriodProblems[p].length > 0) ?? 'all'
 
@@ -63,7 +52,6 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
           Back to companies
         </Link>
 
-        {/* Company header — static, baked at build time */}
         <div className="flex flex-col sm:flex-row sm:items-start gap-5 mb-8">
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold flex-shrink-0"
@@ -95,7 +83,6 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
               </span>
             </div>
 
-            {/* Progress bar + problem table share state via CompanyProgress */}
             <CompanyProgress
               slug={slug}
               totalCount={stats.totalCount}

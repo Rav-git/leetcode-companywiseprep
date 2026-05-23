@@ -9,6 +9,15 @@ import { Company, CompanyWithStats, Problem, TimePeriod } from '@/types'
 //   - During build, identical cache keys are only hit once — 662 pages share results.
 //   - At runtime, cached for `revalidate` seconds before re-querying.
 
+export async function getTopCompanySlugs(limit: number): Promise<string[]> {
+  const rows = await prisma.company.findMany({
+    take: limit,
+    select: { slug: true },
+    orderBy: { problems: { _count: 'desc' } },
+  })
+  return rows.map(r => r.slug)
+}
+
 export const getCompanyList = unstable_cache(
   async (): Promise<Company[]> => {
     return prisma.company.findMany({
