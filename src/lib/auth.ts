@@ -7,7 +7,7 @@ import prisma from './prisma'
 type UserWithToken = {
   id: string; email: string | null; name: string | null
   password: string | null; emailVerified: boolean
-  signInToken: string | null; signInTokenExpiry: Date | null
+  signInToken: string | null; signInTokenExpiresAt: Date | null
 }
 
 declare module 'next-auth' {
@@ -48,16 +48,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const token = credentials.signInToken as string
           if (
             !user.signInToken ||
-            !user.signInTokenExpiry ||
+            !user.signInTokenExpiresAt ||
             user.signInToken !== token ||
-            new Date() > user.signInTokenExpiry
+            new Date() > user.signInTokenExpiresAt
           ) {
             return null
           }
           // Consume token immediately — single use
           await prisma.user.update({
             where: { id: user.id },
-            data: { signInToken: null, signInTokenExpiry: null },
+            data: { signInToken: null, signInTokenExpiresAt: null },
           })
           return { id: user.id, email: user.email, name: user.name ?? null, image: null }
         }

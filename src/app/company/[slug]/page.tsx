@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { fetchCompanyList, fetchProblems, fetchCompanyStats } from '@/lib/github'
+import { getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import CompanyProgress from '@/components/CompanyProgress'
 import { TimePeriod, Problem } from '@/types'
@@ -12,23 +12,23 @@ interface CompanyPageProps {
 export const revalidate = 3600
 
 export async function generateStaticParams() {
-  const companies = await fetchCompanyList()
-  return companies.map(c => ({ slug: c.slug }))
+  const companies = await getCompanyList()
+  return companies.map((c: { slug: string }) => ({ slug: c.slug }))
 }
 
 export default async function CompanyPage({ params }: CompanyPageProps) {
   const { slug } = params
 
   // Validate first (cached 86400s) before the heavier parallel fetches
-  const companies = await fetchCompanyList()
-  const company = companies.find(c => c.slug === slug)
+  const companies = await getCompanyList()
+  const company = companies.find((c: { slug: string }) => c.slug === slug)
   if (!company) notFound()
 
   const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
   // Fetch all periods in parallel at build time — zero loading spinners when switching tabs
   const [periodResults, stats] = await Promise.all([
-    Promise.all(ALL_PERIODS.map(p => fetchProblems(slug, p).then(probs => [p, probs] as [TimePeriod, Problem[]]))),
-    fetchCompanyStats(slug),
+    Promise.all(ALL_PERIODS.map(p => getCompanyProblems(slug, p).then((probs: Problem[]) => [p, probs] as [TimePeriod, Problem[]]))),
+    getCompanyStats(slug),
   ])
   const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
 

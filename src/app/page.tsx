@@ -1,4 +1,4 @@
-import { fetchCompanyList, fetchCompanyStats } from '@/lib/github'
+import { getAllCompaniesWithStats } from '@/lib/companies'
 import { CompanyWithStats } from '@/types'
 import CompanyGrid from '@/components/CompanyGrid'
 
@@ -16,26 +16,17 @@ const PRIORITY_SLUGS = [
 ]
 
 export default async function Home() {
-  const allCompanies = await fetchCompanyList()
-
-  // Fetch stats for every company at build/revalidation time — no GitHub calls at runtime
-  const statsResults = await Promise.all(
-    allCompanies.map(c =>
-      fetchCompanyStats(c.slug).then(stats => ({ slug: c.slug, ...stats }))
-    )
-  )
-  const statsMap = new Map(statsResults.map(s => [s.slug, s]))
+  // Single SQL query replaces the old 662-call Promise.all loop
+  const allCompanies = await getAllCompaniesWithStats()
 
   const prioritySet = new Set(PRIORITY_SLUGS)
 
   const companiesWithStats: CompanyWithStats[] = [
     ...allCompanies
       .filter(c => prioritySet.has(c.slug))
-      .map(c => ({ ...c, ...(statsMap.get(c.slug) ?? { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }) }))
       .sort((a, b) => b.totalCount - a.totalCount),
     ...allCompanies
       .filter(c => !prioritySet.has(c.slug))
-      .map(c => ({ ...c, ...(statsMap.get(c.slug) ?? { totalCount: 0, easyCount: 0, mediumCount: 0, hardCount: 0 }) }))
       .sort((a, b) => b.totalCount - a.totalCount),
   ]
 

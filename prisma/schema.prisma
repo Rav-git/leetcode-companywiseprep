@@ -8,19 +8,21 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
 model User {
-  id                String          @id @default(cuid())
+  id                String              @id @default(cuid())
   name              String?
-  email             String?         @unique
+  email             String?             @unique
   password          String?
-  emailVerified     Boolean         @default(false)
-  createdAt         DateTime        @default(now())
-  lastActiveAt      DateTime        @default(now())
+  emailVerified     Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  lastActiveAt      DateTime            @default(now())
   reengageSentAt    DateTime?
-  emailOptOut       Boolean         @default(false)
-  signInToken       String?
-  signInTokenExpiry DateTime?
-  solvedProblems    SolvedProblem[]
+  emailOptOut       Boolean             @default(false)
+  signInToken          String?
+  signInTokenExpiresAt DateTime?
+  solvedProblems    UserSolvedProblem[]
 
   @@index([lastActiveAt])
 }
@@ -36,14 +38,53 @@ model OtpCode {
   @@index([email])
 }
 
-model SolvedProblem {
-  id        String   @id @default(cuid())
+// ─── Reference data (seeded from GitHub CSVs, refreshed weekly) ──────────────
+
+model Company {
+  id       Int              @id @default(autoincrement())
+  slug     String           @unique  // "google"
+  name     String                    // "Google"
+  problems CompanyProblem[]
+}
+
+model Problem {
+  id             Int                 @id       // LeetCode frontend question ID (1, 2, 3…)
+  titleSlug      String              @unique   // "two-sum"
+  title          String
+  difficulty     String                        // "Easy" | "Medium" | "Hard"
+  acceptanceRate Float
+  companies      CompanyProblem[]
+  solvedBy       UserSolvedProblem[]
+
+  @@index([difficulty])
+  @@index([titleSlug])
+}
+
+model CompanyProblem {
+  companyId Int
+  problemId Int
+  period    String   // "thirty-days" | "three-months" | "six-months" | "more-than-six-months" | "all"
+  frequency Float
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  problem   Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, problemId, period])
+  // Fast lookup: all problems for a company in a period, sorted by frequency (company page)
+  @@index([companyId, period, frequency])
+  // Fast reverse lookup: which companies ask this problem (sync cross-reference)
+  @@index([problemId])
+}
+
+// ─── User data ───────────────────────────────────────────────────────────────
+
+model UserSolvedProblem {
   userId    String
   problemId Int
-  company   String
   solvedAt  DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem   Problem  @relation(fields: [problemId], references: [id])
 
-  @@unique([userId, problemId, company])
-  @@index([userId, company])
+  @@id([userId, problemId])
+  // Fast dashboard sort by date and streak calculation
+  @@index([userId, solvedAt])
 }

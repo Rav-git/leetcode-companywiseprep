@@ -31,8 +31,6 @@ export default function CompanyGrid({ companies }: CompanyGridProps) {
       .then(progressData => {
         progressCache.setSolvedByCompany(progressData)
         setSolvedByCompany(progressData)
-        // Prefetch detail cache for every company the user has solved at least one problem in
-        Object.keys(progressData).forEach(slug => progressCache.prefetch(slug))
       })
       .catch(() => {})
   }, [])

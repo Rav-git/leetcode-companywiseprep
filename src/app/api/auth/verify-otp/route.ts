@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     data: {
       emailVerified: true,
       signInToken,
-      signInTokenExpiry: new Date(Date.now() + 5 * 60 * 1000),
+      signInTokenExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
     },
   })
 

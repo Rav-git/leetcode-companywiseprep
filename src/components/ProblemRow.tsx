@@ -4,19 +4,18 @@ import FrequencyBar from './FrequencyBar'
 import SolveButton from './SolveButton'
 
 interface ProblemRowProps {
-  problem: Problem
-  rank: number
-  isSolved: boolean
-  company: string
+  problem:        Problem
+  rank:           number
+  isSolved:       boolean
   onSolvedToggle: (problemId: number, solved: boolean) => void
 }
 
-export default function ProblemRow({ problem, rank, isSolved, company, onSolvedToggle }: ProblemRowProps) {
+export default function ProblemRow({ problem, rank, isSolved, onSolvedToggle }: ProblemRowProps) {
   return (
     <tr
       className="transition-colors cursor-pointer group"
       style={{
-        borderBottom: '1px solid #222',
+        borderBottom:    '1px solid #222',
         backgroundColor: isSolved ? 'rgba(0,184,163,0.04)' : 'transparent',
       }}
       onClick={() => window.open(problem.url, '_blank', 'noopener,noreferrer')}
@@ -44,15 +43,11 @@ export default function ProblemRow({ problem, rank, isSolved, company, onSolvedT
       <td className="px-4 py-3.5 w-40">
         <FrequencyBar value={problem.frequency} />
       </td>
-      <td
-        className="px-4 py-3.5 w-12"
-        onClick={e => e.stopPropagation()}
-      >
+      <td className="px-4 py-3.5 w-12" onClick={e => e.stopPropagation()}>
         <SolveButton
           problemId={problem.id}
-          company={company}
           initialSolved={isSolved}
-          onToggle={(solved) => onSolvedToggle(problem.id, solved)}
+          onToggle={solved => onSolvedToggle(problem.id, solved)}
         />
       </td>
     </tr>

@@ -6,8 +6,9 @@ Code Company Wise is a full-stack web application that aggregates LeetCode compa
 
 **Key numbers:**
 - 662 companies
-- ~3,000 unique LeetCode problems
+- ~3,310 unique LeetCode problems across all company lists
 - 5 time periods per company (30d, 3m, 6m, 6m+, all)
+- ~40,936 company-problem mappings stored in the database
 - ~666 statically generated pages at build time
 
 ---
@@ -25,7 +26,7 @@ Code Company Wise is a full-stack web application that aggregates LeetCode compa
 │         │                 │                                         │
 │  ┌──────▼─────────────────▼──────────────────────────────────────┐ │
 │  │              Client Components (React)                         │ │
-│  │  CompanyGrid │ CompanyPageClient │ ProblemTable │ SolveButton  │ │
+│  │  CompanyGrid │ CompanyProgress │ ProblemTable │ SolveButton    │ │
 │  └──────────────────────────┬───────────────────────────────────-┘ │
 └─────────────────────────────┼───────────────────────────────────────┘
                               │ HTTPS API calls
@@ -40,12 +41,11 @@ Code Company Wise is a full-stack web application that aggregates LeetCode compa
 │  │    tracking  │   └────────────────────────────────────────────┘   │
 │  └─────────────┘                                                      │
 │                                                                       │
-│  ┌──────────────────────┐   ┌──────────────────────────────────────┐ │
-│  │   Vercel Cron        │   │         Next.js Fetch Cache           │ │
-│  │  0 9 * * * UTC       │   │  GitHub data revalidated every 1-24h  │ │
-│  │  /api/cron/          │   └──────────────────────────────────────┘ │
-│  │  reengagement        │                                             │
-│  └──────────────────────┘                                             │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │   Vercel Cron Jobs                                            │    │
+│  │  0 9 * * *   UTC → /api/cron/reengagement  (daily)           │    │
+│  │  0 0 * * 0   UTC → /api/cron/refresh-data  (weekly Sunday)   │    │
+│  └──────────────────────────────────────────────────────────────┘    │
 └───────────┬──────────────────────────────┬────────────────────────────┘
             │                              │
   ┌─────────▼──────────┐       ┌──────────▼──────────┐
@@ -53,15 +53,21 @@ Code Company Wise is a full-stack web application that aggregates LeetCode compa
   │                     │       │                      │
   │  User               │       │  Rate limit counters │
   │  OtpCode            │       │  (sliding window)    │
-  │  SolvedProblem      │       └─────────────────────┘
+  │  Company            │       └─────────────────────┘
+  │  Problem            │
+  │  CompanyProblem     │       ┌─────────────────────┐
+  │  UserSolvedProblem  │       │   Gmail SMTP         │
+  └─────────────────────┘       │                      │
+            │                   │  OTP emails          │
+            │  (write path      │  Re-engagement       │
+            │   only — weekly)  └─────────────────────┘
+  ┌─────────▼──────────┐
+  │   GitHub (raw CDN)  │
+  │                     │
+  │  CSV files per      │
+  │  company/period     │
+  │  Weekly cron only   │
   └─────────────────────┘
-            │
-  ┌─────────▼──────────┐       ┌─────────────────────┐
-  │   GitHub (raw CDN)  │       │   Gmail SMTP         │
-  │                     │       │                      │
-  │  CSV files per      │       │  OTP emails          │
-  │  company/period     │       │  Re-engagement       │
-  └─────────────────────┘       └─────────────────────┘
 ```
 
 ---
@@ -79,26 +85,37 @@ Code Company Wise is a full-stack web application that aggregates LeetCode compa
 | Rate Limiting | Upstash Redis | Serverless-compatible sliding window |
 | Email | Nodemailer + Gmail | Simple, no third-party email service needed |
 | Hosting | Vercel | Zero-config Next.js, built-in cron, CDN |
-| Data Source | GitHub (public repo) | Free LeetCode company-wise CSV data |
+| Data Source | PostgreSQL (DB-backed) | Seeded once from GitHub CSVs; zero runtime HTTP to GitHub |
 
 ---
 
 ## 4. Core Subsystems
 
-### 4.1 Problem Data Pipeline (Read-only, No DB)
+### 4.1 Problem Data Pipeline (DB-backed)
+
+**Critical change from v1:** The old architecture fetched GitHub CSVs at runtime using Next.js fetch cache (revalidate: 3600s). This created tight coupling to an external service and required 662 × 5 = 3,310 HTTP calls at build time. The new approach seeds all data into Postgres once and keeps it fresh via a weekly cron.
 
 ```
-GitHub Repo (CSV files)
+ONE-TIME SEED (scripts/seed.ts):
+  GitHub Raw CDN (662 company directories × 5 period CSVs)
+       │  fetch() with 15-concurrency worker pool
+       ▼
+  parseCSV() → [Company, Problem, CompanyProblem]
        │
-       ▼  fetch() with Next.js cache (revalidate: 3600s)
-fetchProblems(slug, period)
-       │
-       ▼  parsed in-process
-Problem[]  ──► baked into static pages at build time (generateStaticParams)
-               ──► 662 company pages × 5 periods = pre-fetched at build
-```
+       ▼  batch upsert in chunks of 500
+  Postgres: 662 companies · 3,310 problems · 40,936 CompanyProblem rows
 
-**Critical:** `generateStaticParams()` returns `{ slug }` only — ONE page per company, not one per period. All 5 period datasets are fetched in parallel at build time and bundled as props into that single page. The only DB interaction is user solve state.
+WEEKLY REFRESH (/api/cron/refresh-data — every Sunday 00:00 UTC):
+  Same pipeline, incremental — skipDuplicates means safe to re-run
+  Concurrency: 15 parallel GitHub CDN requests
+  Returns: { companies, problems, mappings, durationMs }
+
+RUNTIME (src/lib/companies.ts — ZERO GitHub HTTP calls):
+  getCompanyList()              → prisma.company.findMany()
+  getCompanyProblems(slug, per) → JOIN CompanyProblem + Problem WHERE company+period
+  getCompanyStats(slug)         → difficulty counts, fallback period order
+  getAllCompaniesWithStats()     → single $queryRaw for all 662 companies (home page)
+```
 
 ### 4.2 Authentication System
 
@@ -123,24 +140,46 @@ Path B — Returning User:
          → JWT cookie set → authenticated
 ```
 
-### 4.3 Progress Tracking System (3-layer cache)
+### 4.3 Progress Tracking System (2-layer cache)
 
 ```
 Layer 1: Module-level Map (progressCache)
   - Lives in browser memory for the tab session
-  - Populated on first API call, updated on every solve toggle
+  - Populated by single bulk API call on mount (fetchAllCompanyProgress)
+  - Updated on every solve toggle
   - Makes all subsequent navigation instant (zero flash)
 
-Layer 2: Next.js Fetch Cache
-  - GitHub CSV data cached server-side (1h revalidation)
-  - No caching on user progress API (user-specific, dynamic)
-
-Layer 3: Supabase (source of truth)
-  - SolvedProblem table with index on (userId, company)
+Layer 2: Supabase Postgres (source of truth)
+  - UserSolvedProblem table with composite PK (userId, problemId)
+  - Solving a problem marks it GLOBALLY — no company column
+  - Company cross-reference done via JOIN through CompanyProblem at query time
   - Written on every solve/unsolve action
 ```
 
-### 4.4 Re-engagement Email Pipeline
+### 4.4 LeetCode Sync Subsystem (New)
+
+Users who already have a LeetCode account can import their full solving history with one click.
+
+```
+User visits /dashboard/sync
+  → pastes their LEETCODE_SESSION cookie value
+  → POST /api/leetcode/sync { session }
+
+  Server flow:
+  1. LeetCode GraphQL API (questionList, status: AC, paginated 100/page)
+     → full list of all accepted problems for the session
+  2. prisma.problem.findMany({ where: { titleSlug: { in: solvedSlugs } } })
+     → cross-reference against DB — single query, instant after seeding
+  3. diff against existing UserSolvedProblem rows for this user
+  4. batch insert new rows (500/batch, skipDuplicates: true)
+  5. return SyncResult: { totalFetched, matchedInCompanies, notInAnyCompany,
+                          newlyMarked, alreadySolved, companiesAffected, durationMs }
+
+Preview endpoint (POST /api/leetcode/session-solved):
+  Same LeetCode GraphQL call, NO DB writes — lets users preview before committing
+```
+
+### 4.5 Re-engagement Email Pipeline
 
 ```
 User visits page
@@ -173,15 +212,18 @@ User.reengageSentAt = NOW()
 
 | Page | Strategy | Cache TTL | Reason |
 |------|----------|-----------|--------|
-| `/` | SSG (○) | 24 hours | Company list + stats baked at build |
-| `/company/[slug]` | SSG (●) | 1 hour | 662 pages pre-built, revalidated hourly |
+| `/` | SSG (○) | 24 hours | getAllCompaniesWithStats() DB query baked at build |
+| `/company/[slug]` | SSG (●) | 1 hour | 662 pages pre-built from DB; all 5 periods bundled |
+| `/dashboard` | Dynamic (ƒ) | None | 4 parallel user-specific DB queries, force-dynamic |
+| `/dashboard/sync` | SSG (○) | — | Pure client component, no server data |
 | `/auth/signin` | SSG (○) | — | Static form, no data needed |
 | `/auth/signup` | SSG (○) | — | Static form |
 | `/auth/verify` | SSG (○) | — | Suspense-wrapped, reads URL params client-side |
-| `/dashboard` | Dynamic (ƒ) | None | User-specific data, force-dynamic |
 | `/api/*` | Dynamic (ƒ) | None | All API routes are serverless functions |
 
 **Critical insight:** The layout (`RootLayout`) is static because `Navbar` uses `useSession()` (client-side) instead of `await auth()` (server-side). This means the home page is CDN-served globally, reducing TTFB from ~3.6s to <100ms.
+
+**Build behaviour:** `generateStaticParams()` calls `getCompanyList()` (Prisma, not GitHub), so build-time data comes from the DB. This means build output is correct even if GitHub is temporarily unreachable.
 
 ---
 
@@ -193,22 +235,26 @@ User.reengageSentAt = NOW()
 │                                                             │
 │  Browser Tab Memory (progressCache module)                  │
 │  ├── solvedByCompany: Record<slug, count>                   │
+│  │   Populated by single /api/user-progress call on mount   │
 │  └── per-company: { solvedCount, solvedIds[] }              │
-│      Populated on first visit, persists across navigations  │
+│      Populated on company hover prefetch / page visit       │
+│      Persists across navigations within the tab             │
 │                                                             │
 │  Vercel CDN / Edge Cache                                    │
 │  ├── / → 24h (revalidate: 86400)                           │
 │  └── /company/[slug] → 1h (revalidate: 3600)               │
 │                                                             │
-│  Next.js Server Fetch Cache                                 │
-│  ├── fetchCompanyList() → 24h                              │
-│  ├── fetchProblems(slug, period) → 1h                      │
-│  └── fetchCompanyStats(slug) → 24h                         │
+│  Supabase Postgres (source of truth — no fetch cache)       │
+│  ├── Problem data — read by Server Components at build      │
+│  ├── User progress — read by API routes at request time     │
+│  └── No Next.js fetch cache needed: Prisma is direct TCP    │
 │                                                             │
 │  Upstash Redis (rate limiting only)                        │
 │  └── Sliding window counters, auto-expire                  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** The old architecture had a "Next.js Server Fetch Cache" layer for GitHub CSV data. This layer no longer exists for problem data. All problem data reads go directly to Postgres via Prisma.
 
 ---
 
@@ -225,7 +271,7 @@ User.reengageSentAt = NOW()
 | Solve spam | Rate limit: 60 req/min per user |
 | Resend flooding | Rate limit: 3 req/10min per email |
 | Internal endpoint abuse | `x-internal-secret` header required on `/api/internal/*` |
-| Cron endpoint abuse | `Authorization: Bearer <CRON_SECRET>` required |
+| Cron endpoint abuse | `Authorization: Bearer <CRON_SECRET>` required (both cron routes) |
 | Email unsubscribe forgery | HMAC-SHA256 signed token (keyed with AUTH_SECRET) |
 | SQL injection | Prisma parameterized queries throughout; raw queries use tagged template literals |
 | XSS | React's JSX escaping + no `dangerouslySetInnerHTML` |
@@ -236,11 +282,12 @@ User.reengageSentAt = NOW()
 
 | Service | Usage | Failure Mode |
 |---------|-------|-------------|
-| GitHub (raw CDN) | Problem CSV data | Next.js returns stale cache or empty array — site still works, shows no problems |
-| Supabase Postgres | User/solve data | API routes return 500; static pages unaffected |
+| GitHub (raw CDN) | Weekly data refresh cron only — NOT in the runtime request path | Cron run skips; DB retains previous data; site fully functional |
+| Supabase Postgres | All problem data + user/solve data | API routes return 500; pre-built static pages still served from CDN |
 | Upstash Redis | Rate limiting | `createRateLimiter()` returns null — rate limiting disabled, site still works |
 | Gmail SMTP | OTP + re-engagement emails | Registration fails gracefully with error message |
-| Vercel Cron | Daily re-engagement | Emails skip that day — no data loss |
+| Vercel Cron | Daily re-engagement + weekly data refresh | Emails/refresh skip that run — no data loss |
+| LeetCode GraphQL | LeetCode Sync feature only — user-initiated | Sync endpoint returns 401/502; rest of app unaffected |
 
 ---
 
@@ -250,10 +297,10 @@ User.reengageSentAt = NOW()
 |-------|-----------|---------|
 | 1K users | None — static pages handle any load | — |
 | 10K users | Supabase free tier connection limits | Upgrade to Supabase Pro, connection pooler already configured |
-| 100K users | SolvedProblem table (10M rows at avg 100 solves/user) | Index on (userId, company) already exists; read is O(log n) |
-| 100K users | Daily cron emails (100 batch limit) | `LIMIT 100` per run means backlog builds up; increase batch or run more frequently |
-| 1M users | GitHub CSV fetching | Mirror CSVs to own S3/CDN, remove GitHub dependency |
+| 100K users | UserSolvedProblem table (100K users × 300 avg solves = 30M rows) | Composite PK index `(userId, problemId)` already exists; reads are O(log n) |
+| 100K users | Daily cron emails (100 batch limit per run) | `LIMIT 100` per run means backlog builds up; increase batch or schedule more frequently |
 | 1M users | Single Postgres instance | Read replicas, or move to PlanetScale/Neon with branching |
+| Any scale | GitHub CSV dependency (weekly cron) | Mirror CSVs to own S3/CDN if GitHub rate-limits the cron |
 
 ---
 
@@ -265,6 +312,7 @@ GitHub (main branch)
        ▼
 Vercel CI/CD
   ├── npm run build (prisma generate + next build)
+  ├── generateStaticParams() → getCompanyList() → Prisma → 662 company slugs
   ├── Generates ~666 static pages (662 company + home + auth + error pages)
   └── Deploys to Vercel Edge Network (global CDN)
        │
@@ -272,12 +320,14 @@ Vercel CI/CD
        ├── API routes → Node.js serverless functions (us-east-1 default)
        └── Middleware → Edge runtime (runs at CDN edge)
 
-Vercel Cron Jobs:
-  └── /api/cron/reengagement → 0 9 * * * (daily 09:00 UTC)
+Vercel Cron Jobs (vercel.json):
+  ├── /api/cron/reengagement → 0 9 * * *   (daily 09:00 UTC)
+  └── /api/cron/refresh-data → 0 0 * * 0   (weekly Sunday midnight UTC)
 
 Environment:
   Production: Vercel (env vars in Vercel dashboard)
-  Development: .env.local (DATABASE_URL, DIRECT_URL, GMAIL_*, AUTH_SECRET, etc.)
+  Development: .env.local (DATABASE_URL, DIRECT_URL, GMAIL_*, AUTH_SECRET,
+               INTERNAL_SECRET, CRON_SECRET, UPSTASH_*, NEXTAUTH_URL)
 ```
 
 ---
@@ -288,18 +338,21 @@ Environment:
 ```
 Browser → Vercel CDN
   CDN hit? → serve HTML instantly (<100ms TTFB)
-  CDN miss? → Next.js revalidates: fetchCompanyList() + fetchCompanyStats(×662) → rebuild page
+  CDN miss? → Next.js revalidates: getAllCompaniesWithStats() (single Prisma $queryRaw)
+              → rebuild page → fill CDN cache
 
-Browser renders → CompanyGrid (client component)
-  → fetch('/api/user-progress') [if logged in]
+Browser renders → CompanyGrid (client component, logged in)
+  → fetch('/api/user-progress')                  [single request for ALL 662 companies]
   → populate solvedByCompany in progressCache
   → render solved counts on company cards
+  → on card hover: progressCache.prefetch(slug) + router.prefetch(slug)
+                   [no scroll-triggered requests]
 ```
 
 ### Company Page Load
 ```
 Browser → Vercel CDN
-  → serve pre-built HTML (all 5 periods baked in)
+  → serve pre-built HTML (all 5 periods baked in from DB at build time)
 
 Browser renders → CompanyProgress (via useCompanyProgress hook)
   progressCache.get(slug)?
@@ -312,10 +365,22 @@ Browser renders → CompanyProgress (via useCompanyProgress hook)
 ```
 User clicks SolveButton
   → optimistic update (UI shows solved immediately)
-  → POST /api/solve { problemId, company }
+  → POST /api/solve { problemId }   [no company field]
       → auth() check
       → rate limit check (Upstash)
-      → prisma.solvedProblem.upsert()
-  → progressCache.set() updated in memory
-  → HTTP cache invalidation (fetch with cache:'reload')
+      → prisma.userSolvedProblem.upsert(userId, problemId)
+  → progressCache updated in memory (solvedIds + solvedCount)
+  → if error: revert optimistic update
+```
+
+### LeetCode Sync
+```
+User visits /dashboard/sync → pastes LEETCODE_SESSION
+  → POST /api/leetcode/sync { session }
+      → LeetCode GraphQL: all AC problems (paginated 100/page)
+      → prisma.problem.findMany(titleSlug IN solvedSlugs)
+      → diff against existing UserSolvedProblem for this user
+      → batch insert new rows (500/batch, skipDuplicates: true)
+      → return SyncResult stats
+  → UI shows: newlyMarked / alreadySolved / companiesAffected
 ```

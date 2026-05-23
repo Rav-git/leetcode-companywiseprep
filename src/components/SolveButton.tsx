@@ -6,18 +6,16 @@ import { useRouter } from 'next/navigation'
 import { markSolved, markUnsolved } from '@/services/solve.service'
 
 interface SolveButtonProps {
-  problemId: number
-  company: string
+  problemId:     number
   initialSolved: boolean
-  onToggle: (solved: boolean) => void
+  onToggle:      (solved: boolean) => void
 }
 
-export default function SolveButton({ problemId, company, initialSolved, onToggle }: SolveButtonProps) {
-  const [solved, setSolved] = useState(initialSolved)
+export default function SolveButton({ problemId, initialSolved, onToggle }: SolveButtonProps) {
+  const [solved,  setSolved]  = useState(initialSolved)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // Don't overwrite optimistic state mid-request — only sync when idle
     if (!loading) setSolved(initialSolved)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSolved])
@@ -29,7 +27,6 @@ export default function SolveButton({ problemId, company, initialSolved, onToggl
     e.stopPropagation()
 
     if (!session) {
-      // /api/auth/signin is the NextAuth internal handler, not the UI page
       router.push('/auth/signin')
       return
     }
@@ -40,8 +37,8 @@ export default function SolveButton({ problemId, company, initialSolved, onToggl
 
     try {
       const ok = newSolved
-        ? await markSolved(problemId, company)
-        : await markUnsolved(problemId, company)
+        ? await markSolved(problemId)
+        : await markUnsolved(problemId)
 
       if (ok) {
         onToggle(newSolved)

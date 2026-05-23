@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useRef, type ChangeEvent } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { Problem, TimePeriod, Difficulty } from '@/types'
 import TimePeriodSelector from './TimePeriodSelector'
 import ProblemRow from './ProblemRow'
@@ -9,10 +11,10 @@ import TextInput from './ui/TextInput'
 
 interface ProblemTableProps {
   allPeriodProblems: Record<TimePeriod, Problem[]>
-  slug: string
-  initialPeriod: TimePeriod
-  solvedSet: Set<number>
-  onSolvedToggle: (problemId: number, solved: boolean) => void
+  slug:              string   // company slug — used for dynamic period fetch only
+  initialPeriod:     TimePeriod
+  solvedSet:         Set<number>
+  onSolvedToggle:    (problemId: number, solved: boolean) => void
 }
 
 const PAGE_SIZE = 30
@@ -25,18 +27,22 @@ const DIFFICULTY_FILTER_COLORS: Record<string, { active: string; activeBorder: s
 }
 
 export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, solvedSet, onSolvedToggle }: ProblemTableProps) {
+  const { status } = useSession()
+  const router = useRouter()
   const [problems, setProblems] = useState<Problem[]>(allPeriodProblems[initialPeriod])
   const [period, setPeriod] = useState<TimePeriod>(initialPeriod)
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | 'All'>('All')
   const [page, setPage] = useState(1)
+  const [showUnsolved, setShowUnsolved] = useState(false)
 
   // Pre-seeded with all periods fetched at build time — every tab switch is instant
   const cache = useRef<Map<TimePeriod, Problem[]>>(new Map(Object.entries(allPeriodProblems) as [TimePeriod, Problem[]][]))
 
   const handlePeriodChange = async (newPeriod: TimePeriod) => {
     setPage(1)
+    setShowUnsolved(false)
 
     const cached = cache.current.get(newPeriod)
     if (cached) {
@@ -68,6 +74,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
         p.title.toLowerCase().includes(search.toLowerCase()) ||
         p.id.toString().includes(search)
     )
+    .filter(p => !showUnsolved || !solvedSet.has(p.id))
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -85,7 +92,7 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
       {/* Filters row */}
       <div className="px-4 py-3 flex flex-col sm:flex-row gap-3 items-start sm:items-center" style={{ borderBottom: '1px solid #2a2a2a' }}>
         {/* Difficulty filters */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {difficultyOptions.map(diff => {
             const isActive = selectedDifficulty === diff
             const colorConfig = DIFFICULTY_FILTER_COLORS[diff]
@@ -104,6 +111,25 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
               </button>
             )
           })}
+
+          {/* Separator */}
+          <div className="w-px self-stretch" style={{ backgroundColor: '#2a2a2a' }} />
+
+          {/* Not Solved toggle */}
+          <button
+            onClick={() => {
+              if (status !== 'authenticated') { router.push('/auth/signin'); return }
+              setShowUnsolved(v => !v); setPage(1)
+            }}
+            className="px-3.5 py-1 text-sm rounded-full transition-all font-medium"
+            style={{
+              backgroundColor: showUnsolved ? 'rgba(255,55,95,0.1)' : 'transparent',
+              border: `1px solid ${showUnsolved ? 'rgba(255,55,95,0.4)' : '#3e3e3e'}`,
+              color: showUnsolved ? '#FF375F' : 'rgba(235,235,245,0.45)',
+            }}
+          >
+            Not Solved
+          </button>
         </div>
 
         {/* Search */}
@@ -155,7 +181,6 @@ export default function ProblemTable({ allPeriodProblems, slug, initialPeriod, s
                       problem={problem}
                       rank={(page - 1) * PAGE_SIZE + idx + 1}
                       isSolved={solvedSet.has(problem.id)}
-                      company={slug}
                       onSolvedToggle={onSolvedToggle}
                     />
                   ))

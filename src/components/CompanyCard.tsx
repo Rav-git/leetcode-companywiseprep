@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CompanyWithStats } from '@/types'
@@ -19,18 +19,33 @@ export default function CompanyCard({ company, solvedCount }: CompanyCardProps) 
   const solvedPercent = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
 
   const router = useRouter()
-  // hasPrefetched guards against duplicate prefetch calls on repeated mouseenter
+  const cardRef = useRef<HTMLDivElement>(null)
   const hasPrefetched = useRef(false)
-  const handleMouseEnter = () => {
-    if (hasPrefetched.current) return
-    hasPrefetched.current = true
-    router.prefetch(`/company/${company.slug}`)
-    progressCache.prefetch(company.slug)
-  }
+
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasPrefetched.current) {
+          hasPrefetched.current = true
+          router.prefetch(`/company/${company.slug}`)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '100px' }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [company.slug, router])
 
   return (
-    <Link href={`/company/${company.slug}`} prefetch={false} onMouseEnter={handleMouseEnter}>
+    <Link href={`/company/${company.slug}`} prefetch={false}>
       <div
+        ref={cardRef}
+        onMouseEnter={() => progressCache.prefetch(company.slug)}
         className="group relative bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl p-4 hover:border-[#FFA116]/40 hover:bg-[#1e1e1e] transition-all duration-200 cursor-pointer h-full flex flex-col gap-3"
         style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
       >

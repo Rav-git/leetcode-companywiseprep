@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchProblems } from '@/lib/github'
+import { getCompanyProblems } from '@/lib/companies'
 import { TimePeriod } from '@/types'
 
 const VALID_PERIODS: TimePeriod[] = [
@@ -22,6 +22,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid period' }, { status: 400 })
   }
 
-  const problems = await fetchProblems(slug, period)
+  const problems = await getCompanyProblems(slug, period)
   return NextResponse.json({ problems })
 }

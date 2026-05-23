@@ -6,17 +6,17 @@
 
 ```sql
 CREATE TABLE "User" (
-  "id"                TEXT         PRIMARY KEY,        -- cuid() e.g. cmp9x3k...
-  "name"              TEXT,                            -- nullable: user's display name
-  "email"             TEXT         UNIQUE,             -- normalized to lowercase on write
-  "password"          TEXT,                            -- bcrypt hash (cost 12), nullable for future OAuth
-  "emailVerified"     BOOLEAN      NOT NULL DEFAULT false, -- false until OTP verified
-  "createdAt"         TIMESTAMP(3) NOT NULL DEFAULT NOW(),
-  "lastActiveAt"      TIMESTAMP(3) NOT NULL DEFAULT NOW(), -- updated once/day by middleware
-  "reengageSentAt"    TIMESTAMP(3),                    -- NULL = never sent
-  "emailOptOut"       BOOLEAN      NOT NULL DEFAULT false, -- set via /api/unsubscribe
-  "signInToken"       TEXT,                            -- 32-byte hex, single-use, 5min TTL
-  "signInTokenExpiry" TIMESTAMP(3)
+  "id"                   TEXT         PRIMARY KEY,        -- cuid() e.g. cmp9x3k...
+  "name"                 TEXT,                            -- nullable: user's display name
+  "email"                TEXT         UNIQUE,             -- normalized to lowercase on write
+  "password"             TEXT,                            -- bcrypt hash (cost 12), nullable for future OAuth
+  "emailVerified"        BOOLEAN      NOT NULL DEFAULT false, -- false until OTP verified
+  "createdAt"            TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+  "lastActiveAt"         TIMESTAMP(3) NOT NULL DEFAULT NOW(), -- updated once/day by middleware
+  "reengageSentAt"       TIMESTAMP(3),                    -- NULL = never sent
+  "emailOptOut"          BOOLEAN      NOT NULL DEFAULT false, -- set via /api/unsubscribe
+  "signInToken"          TEXT,                            -- 32-byte hex, single-use, 5min TTL
+  "signInTokenExpiresAt" TIMESTAMP(3)                     -- was signInTokenExpiry in v1
 );
 
 CREATE INDEX "User_lastActiveAt_idx" ON "User"("lastActiveAt");
@@ -61,35 +61,92 @@ OTPs are 6-digit numbers (10^6 space). SHA-256 is fast but the OTP's entropy is 
 
 ---
 
-### 1.3 SolvedProblem Table
+### 1.3 Company Table
 
 ```sql
-CREATE TABLE "SolvedProblem" (
-  "id"        TEXT         PRIMARY KEY,   -- cuid()
-  "userId"    TEXT         NOT NULL,      -- FK → User.id
-  "problemId" INTEGER      NOT NULL,      -- LeetCode problem number (global, e.g. 1 = Two Sum)
-  "company"   TEXT         NOT NULL,      -- company slug e.g. "amazon"
-  "solvedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
-
-  CONSTRAINT "SolvedProblem_userId_fkey"
-    FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+CREATE TABLE "Company" (
+  "id"   INTEGER PRIMARY KEY AUTOINCREMENT,
+  "slug" TEXT    NOT NULL UNIQUE,  -- "google"  (GitHub directory name)
+  "name" TEXT    NOT NULL          -- "Google"  (title-cased display name)
 );
-
-CREATE UNIQUE INDEX "SolvedProblem_userId_problemId_company_key"
-  ON "SolvedProblem"("userId", "problemId", "company");
-  -- Prevents duplicates; allows same problem solved under different companies
-
-CREATE INDEX "SolvedProblem_userId_company_idx"
-  ON "SolvedProblem"("userId", "company");
-  -- Used by: SELECT WHERE userId=? AND company=? (user-progress API)
 ```
 
-**Why keep `company` column?**
-The home page shows "X solved" per company. Without `company` in SolvedProblem, computing this would require joining every company's problem list (fetched from GitHub) against solved IDs client-side — not feasible. The denormalization is intentional.
+Populated by `scripts/seed.ts` (one-time) and kept fresh by `/api/cron/refresh-data` (weekly). 662 rows in production.
+
+---
+
+### 1.4 Problem Table
+
+```sql
+CREATE TABLE "Problem" (
+  "id"             INTEGER NOT NULL PRIMARY KEY, -- LeetCode frontendQuestionId (1 = Two Sum)
+  "titleSlug"      TEXT    NOT NULL UNIQUE,      -- "two-sum"
+  "title"          TEXT    NOT NULL,             -- "Two Sum"
+  "difficulty"     TEXT    NOT NULL,             -- "Easy" | "Medium" | "Hard"
+  "acceptanceRate" REAL    NOT NULL
+);
+
+CREATE INDEX "Problem_difficulty_idx" ON "Problem"("difficulty");
+CREATE INDEX "Problem_titleSlug_idx"  ON "Problem"("titleSlug");
+-- titleSlug index used by: LeetCode Sync (IN clause on 300-1000 slugs at once)
+```
+
+~3,310 unique rows in production. `id` is NOT autoincrement — it uses the LeetCode problem number directly so joins are natural and sync cross-referencing is trivial.
+
+---
+
+### 1.5 CompanyProblem Table (Join Table)
+
+```sql
+CREATE TABLE "CompanyProblem" (
+  "companyId" INTEGER NOT NULL,  -- FK → Company.id
+  "problemId" INTEGER NOT NULL,  -- FK → Problem.id
+  "period"    TEXT    NOT NULL,  -- "thirty-days" | "three-months" | "six-months"
+                                 -- | "more-than-six-months" | "all"
+  "frequency" REAL    NOT NULL,  -- relative frequency score 0-100
+
+  PRIMARY KEY ("companyId", "problemId", "period"),
+
+  FOREIGN KEY ("companyId") REFERENCES "Company"("id"),
+  FOREIGN KEY ("problemId") REFERENCES "Problem"("id")
+);
+
+CREATE INDEX "CompanyProblem_companyId_period_frequency_idx"
+  ON "CompanyProblem"("companyId", "period", "frequency");
+-- Used by: getCompanyProblems(slug, period) — ORDER BY frequency DESC
+
+CREATE INDEX "CompanyProblem_problemId_idx" ON "CompanyProblem"("problemId");
+-- Used by: dashboard top-companies query (JOIN from UserSolvedProblem)
+```
+
+~40,936 rows in production. The composite PK `(companyId, problemId, period)` is the uniqueness constraint — a problem appears once per company per period.
+
+---
+
+### 1.6 UserSolvedProblem Table
+
+```sql
+CREATE TABLE "UserSolvedProblem" (
+  "userId"    TEXT         NOT NULL,  -- FK → User.id (cascade delete)
+  "problemId" INTEGER      NOT NULL,  -- FK → Problem.id
+  "solvedAt"  TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+
+  PRIMARY KEY ("userId", "problemId"),
+
+  FOREIGN KEY ("userId")    REFERENCES "User"("id")    ON DELETE CASCADE,
+  FOREIGN KEY ("problemId") REFERENCES "Problem"("id")
+);
+
+CREATE INDEX "UserSolvedProblem_userId_solvedAt_idx"
+  ON "UserSolvedProblem"("userId", "solvedAt");
+-- Used by: recent activity query (ORDER BY solvedAt DESC LIMIT 10)
+```
+
+**Critical schema change vs v1:** The old `SolvedProblem` table had a `company` column, meaning solving "Two Sum" for Amazon was a separate row from solving "Two Sum" for Google. The new schema has `UserSolvedProblem` with composite PK `(userId, problemId)` only. Solving a problem marks it **globally**. Company cross-referencing is done at query time via JOIN through `CompanyProblem`. This eliminates duplicate rows, makes the LeetCode sync import much simpler, and makes per-company progress accurate regardless of which company page the user first visited.
 
 **Row estimate at scale:**
-- 100K users × 100 avg solves × 1.5 avg companies per solved problem = **15M rows**
-- With the composite index, a single user's company progress query is O(log N)
+- 100K users × 300 avg solves = **30M rows** (vs 45M+ in the old schema with company duplication)
+- With the composite PK index, a single user's progress query is O(log N)
 
 ---
 
@@ -195,7 +252,7 @@ The home page shows "X solved" per company. Without `company` in SolvedProblem, 
 5. SHA256(code) !== record.codeHash → increment attempts → 400
 6. User.findUnique(email) → 404 if not found
 7. signInToken = randomBytes(32).toString('hex')
-8. User.update → { emailVerified: true, signInToken, signInTokenExpiry: +5min }
+8. User.update → { emailVerified: true, signInToken, signInTokenExpiresAt: +5min }
 9. OtpCode.delete(id)
 10. Return { success: true, signInToken, email }
 ```
@@ -253,7 +310,6 @@ client receives { signInToken, email }
 **Rate limit:** None (reads only).
 
 **Request variants:**
-
 ```
 GET /api/user-progress?company=amazon
 → Returns per-company solve state
@@ -285,33 +341,38 @@ GET /api/user-progress
 
 **DB queries:**
 ```sql
--- With company param:
-SELECT "problemId" FROM "SolvedProblem"
-WHERE "userId" = $1 AND "company" = $2
--- Uses index: SolvedProblem_userId_company_idx
+-- With company param (JOIN through CompanyProblem — no company column in UserSolvedProblem):
+SELECT usp."problemId"
+FROM   "UserSolvedProblem" usp
+JOIN   "CompanyProblem"    cp  ON cp."problemId"  = usp."problemId"
+JOIN   "Company"            c   ON c.id            = cp."companyId"
+WHERE  usp."userId" = $1
+AND    c.slug        = $2
+-- Uses index: UserSolvedProblem PK + CompanyProblem_problemId_idx
 
--- Without company param:
-SELECT "company" FROM "SolvedProblem"
-WHERE "userId" = $1
--- Uses index: SolvedProblem_userId_company_idx (prefix match)
--- Grouped in JS, not SQL
+-- Without company param (single raw SQL for all companies):
+SELECT c.slug, COUNT(DISTINCT usp."problemId") AS count
+FROM   "UserSolvedProblem" usp
+JOIN   "CompanyProblem"   cp ON cp."problemId" = usp."problemId"
+JOIN   "Company"           c  ON c.id          = cp."companyId"
+WHERE  usp."userId" = $1
+GROUP  BY c.slug
 ```
 
 ---
 
 ### 2.5 POST /api/solve
 
-**Purpose:** Mark a problem as solved for a specific company.
+**Purpose:** Mark a problem as solved globally (no company parameter).
 
 **Auth:** Required. Returns 401 if unauthenticated.
 
-**Rate limit:** 60 requests / 1 minute / user
+**Rate limit:** 60 requests / 1 minute / user (keyed by userId)
 
 **Request:**
 ```json
 {
-  "problemId": 1,
-  "company": "amazon"
+  "problemId": 1
 }
 ```
 
@@ -321,21 +382,25 @@ WHERE "userId" = $1
 { "success": true }
 
 // 400
-{ "error": "Missing fields" }
+{ "error": "Missing problemId" }
 
 // 401
 { "error": "Unauthorized" }
 
 // 429
 { "error": "Too many requests. Slow down." }
+
+// 500
+{ "error": "Failed to save progress" }
 ```
 
 **DB operation:**
 ```sql
-INSERT INTO "SolvedProblem" ("id","userId","problemId","company","solvedAt")
-VALUES ($id, $userId, $problemId, $company, NOW())
-ON CONFLICT ("userId","problemId","company") DO NOTHING
+INSERT INTO "UserSolvedProblem" ("userId", "problemId", "solvedAt")
+VALUES ($userId, $problemId, NOW())
+ON CONFLICT ("userId", "problemId") DO NOTHING
 -- Upsert: safe to call multiple times, idempotent
+-- Composite PK (userId, problemId) is the uniqueness constraint
 ```
 
 ---
@@ -351,8 +416,7 @@ ON CONFLICT ("userId","problemId","company") DO NOTHING
 **Request:**
 ```json
 {
-  "problemId": 1,
-  "company": "amazon"
+  "problemId": 1
 }
 ```
 
@@ -361,44 +425,168 @@ ON CONFLICT ("userId","problemId","company") DO NOTHING
 { "success": true }
 ```
 
+**DB operation:**
+```sql
+DELETE FROM "UserSolvedProblem"
+WHERE "userId" = $userId AND "problemId" = $problemId
+```
+
 ---
 
-### 2.7 GET /api/problems
+### 2.7 POST /api/leetcode/session-solved
 
-**Purpose:** Fetch problems for a company+period. Fallback when client-side cache misses.
+**Purpose:** Preview a user's LeetCode solved problems using their session cookie. No DB writes — read-only preview before committing a full sync.
 
-**Auth:** None required.
+**Auth:** None required (preview is public — no user data is stored).
 
 **Request:**
-```
-GET /api/problems?slug=amazon&period=six-months
-```
-
-Valid periods: `thirty-days`, `three-months`, `six-months`, `more-than-six-months`, `all`
-
-**Response:**
 ```json
 {
-  "problems": [
-    {
-      "id": 1,
-      "url": "https://leetcode.com/problems/two-sum/",
-      "slug": "two-sum",
-      "title": "Two Sum",
-      "difficulty": "Easy",
-      "acceptance": 49.1,
-      "frequency": 88.5
-    }
-    // ...
-  ]
+  "session": "eyJ0eXAiOiJKV1QiLCJhbGci..."
+  // Accepts raw value or full "LEETCODE_SESSION=xxx" string (prefix stripped automatically)
 }
 ```
 
-**Note:** In practice, this endpoint is rarely called. All 5 periods are pre-fetched at build time and baked into the page. The `ProblemTable` only calls this if a period isn't in its pre-seeded `ref` cache (shouldn't happen in normal usage).
+**Response:**
+```json
+// 200 OK
+{
+  "totalSolved": 347,
+  "problems": [
+    { "frontendQuestionId": "1", "title": "Two Sum", "titleSlug": "two-sum", "difficulty": "Easy" },
+    ...
+  ]
+}
+
+// 400
+{ "error": "session is required" }
+
+// 401
+{ "error": "Session invalid or expired — no solved problems returned. Please re-copy your LEETCODE_SESSION cookie." }
+
+// 502
+{ "error": "Failed to fetch from LeetCode" }
+```
+
+**Internal logic:**
+```
+1. Strip "LEETCODE_SESSION=" prefix if present
+2. fetchAllSolvedWithSession(session) → LeetCode GraphQL
+   questionList(filters: { status: "AC" }, limit: 100, skip: 0..N)
+   paginated until all pages fetched
+3. If totalSolved === 0 → 401 (expired session)
+4. Return { totalSolved, problems[] }
+```
 
 ---
 
-### 2.8 POST /api/internal/track-active
+### 2.8 POST /api/leetcode/sync
+
+**Purpose:** Full sync — import all accepted LeetCode solutions into UserSolvedProblem. This is the write path; it runs the full service and persists to DB.
+
+**Auth:** Required. Returns 401 if unauthenticated.
+
+**Request:**
+```json
+{
+  "session": "eyJ0eXAiOiJKV1QiLCJhbGci..."
+}
+```
+
+**Response:**
+```json
+// 200 OK
+{
+  "totalFetched":       347,   // problems returned by LeetCode
+  "companiesIndexed":   662,   // total companies in DB
+  "matchedInCompanies": 289,   // solved problems found in ≥1 company
+  "notInAnyCompany": [
+    { "frontendQuestionId": "2834", "title": "Find the Minimum Possible Sum...", "titleSlug": "...", "difficulty": "Medium" }
+  ],
+  "newlyMarked":        143,   // new UserSolvedProblem rows inserted this run
+  "alreadySolved":      146,   // problems already in DB before this sync
+  "companiesAffected":  38,    // unique companies with ≥1 of user's solved problems
+  "durationMs":         2140
+}
+
+// 400
+{ "error": "session is required." }
+
+// 401
+{ "error": "Sign in to sync your progress." }
+{ "error": "LeetCode session expired or invalid — re-copy your LEETCODE_SESSION cookie." }
+
+// 500
+{ "error": "No solved problems returned. Session may be expired." }
+```
+
+**Internal logic (leetcode-sync.service.ts):**
+```
+1. fetchAllSolvedWithSession(session)
+   → LeetCode GraphQL, paginated 100/page → list of AC problems
+   → throw if 0 results (expired session)
+
+2. prisma.problem.findMany({ where: { titleSlug: { in: solvedSlugs } } })
+   → cross-reference against DB in one query (single-query, O(log N) on titleSlug index)
+   → matchedProblems[] + notInAnyCompany[] (difference)
+
+3. prisma.userSolvedProblem.findMany({ where: { userId } })
+   → existing solved rows for this user → existingIds Set
+
+4. newProblemIds = matchedIds.filter(id => !existingIds.has(id))
+   → diff computed in JS; no DB round-trip
+
+5. for batch of 500 in newProblemIds:
+     prisma.userSolvedProblem.createMany({ data: batch, skipDuplicates: true })
+   → skipDuplicates is a second safety net after the in-code diff
+
+6. prisma.company.count()  +  $queryRaw for companiesAffected
+   → final stats
+
+No duplicate rows: (a) in-code diff, (b) skipDuplicates, (c) composite PK constraint
+DB_BATCH_SIZE = 500
+```
+
+---
+
+### 2.9 GET /api/cron/refresh-data
+
+**Purpose:** Incremental weekly refresh of all company/problem/mapping data from GitHub CSVs into Postgres.
+
+**Auth:** `Authorization: Bearer <CRON_SECRET>` header
+
+**Triggered by:** Vercel Cron, `0 0 * * 0` (every Sunday midnight UTC)
+
+**Response:**
+```json
+{ "companies": 662, "problems": 3310, "mappings": 40936, "durationMs": 48200 }
+
+// 401 if secret missing or wrong
+{ "error": "Unauthorized" }
+
+// 500 on GitHub parse or DB failure
+{ "error": "Could not parse GitHub page" }
+```
+
+**Internal logic:**
+```
+1. Fetch GitHub HTML → parse react-app embeddedData JSON → extract directory slugs
+2. company.createMany(slugs, skipDuplicates: true)  [batch 500]
+3. withConcurrency(tasks, CONCURRENCY=15):
+   for each slug, for each period:
+     fetch raw.githubusercontent.com/{slug}/{period}.csv
+     parseCSV() → RawProblem[]
+     accumulate into problemMap + mappingRows[]
+4. problem.createMany(problemMap.values(), skipDuplicates: true)  [batch 500]
+5. deduplicate mappingRows by (companyId, problemId, period)
+6. companyProblem.createMany(deduped, skipDuplicates: true)  [batch 500]
+```
+
+**Why skipDuplicates everywhere?** This cron is designed to be idempotent — safe to re-run manually at any time. A transient GitHub failure mid-run doesn't corrupt data; re-running picks up where it left off.
+
+---
+
+### 2.10 POST /api/internal/track-active
 
 **Purpose:** Update `lastActiveAt` for a user. Called fire-and-forget from middleware.
 
@@ -422,7 +610,7 @@ Next.js middleware runs on the Edge Runtime which cannot import Prisma (Node.js 
 
 ---
 
-### 2.9 GET /api/cron/reengagement
+### 2.11 GET /api/cron/reengagement
 
 **Purpose:** Send re-engagement emails to inactive users. Triggered daily by Vercel cron.
 
@@ -450,17 +638,17 @@ LIMIT 100
 **The `reengageSentAt < lastActiveAt` condition explained:**
 ```
 Timeline:
-  Day 1: User visits   → lastActiveAt=Day1
-  Day 8: Cron runs     → emails user, reengageSentAt=Day8
-  Day 9: User visits   → lastActiveAt=Day9  (now > reengageSentAt)
-  Day 16: Cron runs    → reengageSentAt(Day8) < lastActiveAt(Day9) → sends again ✓
+  Day 1:  User visits   → lastActiveAt=Day1
+  Day 8:  Cron runs     → emails user, reengageSentAt=Day8
+  Day 9:  User visits   → lastActiveAt=Day9  (now > reengageSentAt)
+  Day 16: Cron runs     → reengageSentAt(Day8) < lastActiveAt(Day9) → sends again ✓
   Day 16: reengageSentAt=Day16
-  Day 17: Cron runs    → reengageSentAt(Day16) > lastActiveAt(Day9) → skips ✓
+  Day 17: Cron runs     → reengageSentAt(Day16) > lastActiveAt(Day9) → skips ✓
 ```
 
 ---
 
-### 2.10 GET /api/unsubscribe
+### 2.12 GET /api/unsubscribe
 
 **Purpose:** Opt a user out of re-engagement emails via signed link.
 
@@ -526,7 +714,7 @@ authorize(credentials) {
 
   if (credentials.signInToken) {
     // Post-OTP path
-    validate token matches, not expired
+    validate token matches, not expired (signInTokenExpiresAt)
     consume token (set to null in DB)
     return user
   }
@@ -561,38 +749,49 @@ RootLayout (server)
 ├── Navbar (client) — useSession() for auth state
 └── {children}
 
-/ (Home) — server, SSG
+/ (Home) — server, SSG, revalidate: 86400
+├── getAllCompaniesWithStats() → prisma.$queryRaw (single query, all 662 companies)
 └── CompanyGrid (client)
+    ├── fetchAllCompanyProgress() on mount → single /api/user-progress call
     ├── IntersectionObserver (virtual scroll: 50 cards at a time)
     ├── Search filter (local state)
     └── CompanyCard[] (client)
-        ├── Link with prefetch={false}
-        └── onMouseEnter → router.prefetch() + progressCache.prefetch()
+        ├── Link with prefetch={false}  (prevents 662 RSC prefetch requests on load)
+        └── onMouseEnter → router.prefetch(slug) + progressCache.prefetch(slug)
+            (hover = user intent signal; no scroll-triggered requests)
 
-/company/[slug] — server, SSG
-└── CompanyProgress (client) ← replaced CompanyPageClient; uses useCompanyProgress hook
+/company/[slug] — server, SSG, revalidate: 3600
+├── getCompanyProblems(slug, period) × all periods → Prisma (not GitHub)
+└── CompanyProgress (client)
     ├── useCompanyProgress(slug) → { solvedSet, solvedCount, handleSolveToggle }
     │   ├── progressCache read (sync, zero-flash)
     │   └── API fetch (only if cache miss)
-    ├── ProgressBar (ui/ProgressBar — design system colors)
+    ├── ProgressBar (design system colors)
     └── ProblemTable (client)
         ├── TimePeriodSelector (client)
-        │   └── inset box-shadow tab indicator (not border-bottom, avoids clip)
-        ├── Difficulty filter buttons (DIFFICULTY_FILTER_COLORS)
-        ├── TextInput (ui/TextInput — shared focus behavior)
-        ├── Spinner (ui/Spinner — on period tab switch load)
+        ├── Difficulty filter buttons
+        ├── TextInput (shared component)
+        ├── Spinner (on period tab switch)
         ├── Pagination (PAGE_SIZE = 30)
         └── ProblemRow[]
             └── SolveButton (client)
                 ├── useSession() for auth gate
                 ├── optimistic update via handleSolveToggle
-                └── markSolved / markUnsolved (solve.service.ts)
+                └── markSolved(problemId) / markUnsolved(problemId)
+                    [NO company parameter — solve is global]
 
 /dashboard — server, force-dynamic
-├── prisma.solvedProblem.findMany(userId)
-├── fetchProblems(company, 'all') × N companies (GitHub cache)
-├── Streak calculation
-└── Top companies + recent activity
+├── 4 parallel DB queries via Promise.all:
+│   ├── $queryRaw difficulty counts (Easy/Medium/Hard) via GROUP BY
+│   ├── $queryRaw top 8 companies by unique solved problems (JOIN CompanyProblem)
+│   ├── prisma.userSolvedProblem.findMany (recent 10, with problem join)
+│   └── $queryRaw all solved dates for streak calculation
+└── streak calculated server-side (calculateStreak utility)
+
+/dashboard/sync — SSG (client component, no server data)
+├── paste LEETCODE_SESSION cookie
+├── POST /api/leetcode/session-solved → preview solved count
+└── POST /api/leetcode/sync → full import → show SyncResult stats
 
 /auth/signup — client
 └── fetch /api/auth/register → redirect /auth/verify
@@ -620,8 +819,10 @@ No global state library (Redux/Zustand). State is managed at three levels:
 const store = new Map<string, CompanyProgress>()   // per-company solved IDs
 let solvedByCompany: Record<string, number> | null = null  // home page counts
 
-// Write path: after fetch OR after solve toggle
-progressCache.set(slug, { solvedCount, solvedIds })
+// Write paths:
+// 1. CompanyGrid.fetchAllCompanyProgress() → sets solvedByCompany bulk
+// 2. progressCache.prefetch(slug) → sets per-company on hover
+// 3. handleSolveToggle → increments/decrements in-place
 
 // Read path: synchronous, used to initialise React state
 const cached = progressCache.get(slug)  // null if not yet fetched
@@ -637,7 +838,7 @@ useState(cached ? new Set(cached.solvedIds) : new Set())
 
 | Component | State | Updated by |
 |-----------|-------|------------|
-| CompanyGrid | `solvedByCompany`, `displayCount`, `search` | API fetch (progress.service), scroll, user input |
+| CompanyGrid | `solvedByCompany`, `displayCount`, `search` | Single bulk API fetch on mount, scroll, user input |
 | CompanyProgress | `solvedSet`, `solvedCount` via `useCompanyProgress` hook | API fetch, handleSolveToggle callbacks |
 | ProblemTable | `problems`, `period`, `search`, `selectedDifficulty`, `page` | User interaction |
 | SolveButton | `solved`, `loading` | `handleSolveToggle` click + `initialSolved` prop sync |
@@ -649,9 +850,9 @@ handleSolveToggle():
   newSolved = !solved
   setSolved(newSolved)     ← optimistic: UI updates instantly
   setLoading(true)
-  
+
   // solve.service.ts — markSolved / markUnsolved
-  (newSolved ? markSolved : markUnsolved)(problemId, company)
+  (newSolved ? markSolved : markUnsolved)(problemId)   // no company param
     .then(ok => {
       if (ok) onToggle(newSolved)      ← propagate to parent
       else setSolved(!newSolved)        ← revert on failure
@@ -663,7 +864,6 @@ handleSolveToggle():
 useEffect(() => {
   if (!loading) setSolved(initialSolved)
 }, [initialSolved])
-// eslint-disable-next-line: intentional — only sync when initialSolved changes
 ```
 
 ---
@@ -689,11 +889,11 @@ interface Problem {
   title: string       // display title e.g. "Two Sum"
   difficulty: Difficulty
   acceptance: number  // percentage e.g. 49.1
-  frequency: number   // relative frequency within company 0-100
+  frequency: number   // relative frequency within company 0-100 (from CompanyProblem)
 }
 
 interface Company {
-  slug: string        // GitHub directory name e.g. "amazon"
+  slug: string        // DB slug e.g. "amazon"
   name: string        // formatted e.g. "Amazon"
 }
 
@@ -708,6 +908,18 @@ interface CompanyWithStats extends Company {
 interface CompanyProgress {
   solvedCount: number
   solvedIds: number[]
+}
+
+// leetcode-sync.service.ts
+interface SyncResult {
+  totalFetched:       number
+  companiesIndexed:   number
+  matchedInCompanies: number
+  notInAnyCompany:    UnmatchedProblem[]
+  newlyMarked:        number
+  alreadySolved:      number
+  companiesAffected:  number
+  durationMs:         number
 }
 ```
 
@@ -734,31 +946,43 @@ ID, URL, Title, Difficulty, Acceptance, Frequency
 1, https://leetcode.com/problems/two-sum/, Two Sum, Easy, 49.1, 88.5
 ```
 
-### 7.2 Parse Logic
+### 7.2 Parse Logic (shared between seed script and weekly cron)
 
 ```ts
-// src/lib/utils.ts → parseCSVLine()
 // Handles titles with commas (e.g. "Min Stack, Max Stack")
-// by slicing from both ends: parts[0]=id, parts[1]=url, parts[-1]=freq, parts[-2]=acceptance, parts[-3]=difficulty
+// by slicing from both ends: [0]=id, [1]=url, [-1]=freq, [-2]=acceptance, [-3]=difficulty
 // Everything in between = title
 
 const parts = line.split(',')
-const id = parseInt(parts[0])
-const url = parts[1].trim()
-const frequency = parseFloat(parts[parts.length - 1])
+const id         = parseInt(parts[0])
+const url        = parts[1].trim()
+const frequency  = parseFloat(parts[parts.length - 1])
 const acceptance = parseFloat(parts[parts.length - 2])
 const difficulty = parts[parts.length - 3].trim()
-const title = parts.slice(2, parts.length - 3).join(',').trim()
-const slug = url.split('/problems/')[1]?.replace(/\/$/, '')
+const title      = parts.slice(2, parts.length - 3).join(',').trim()
+const titleSlug  = url.split('/problems/')[1]?.replace(/\/$/, '')
 ```
 
-### 7.3 Company List Discovery
+### 7.3 Company List Discovery (weekly cron and seed)
 
 ```ts
-// src/lib/github.ts → fetchCompanyList()
 // Fetches the GitHub HTML page, parses the embedded JSON (react-app embeddedData)
 // to get the repository tree (list of directory names)
 // Filters: contentType === 'directory' AND !name.startsWith('src')
+const slugs = JSON.parse(match[1])
+  .payload.codeViewRepoRoute.tree.items
+  .filter(i => i.contentType === 'directory' && !i.name.startsWith('src'))
+  .map(i => i.name)
+```
+
+### 7.4 Concurrency Control (withConcurrency)
+
+```ts
+// Custom pool — not Promise.all (which would fire all 662 × 5 = 3310 requests at once)
+// Maintains exactly CONCURRENCY=15 in-flight requests at a time
+async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number) {
+  // Worker pool: each worker grabs the next task index atomically
+}
 ```
 
 ---
@@ -820,7 +1044,7 @@ Content:
 - "Top companies like Google, Amazon, and Meta are hiring right now"
 - "Even one problem a day keeps the momentum alive"
 - CTA button → homepage
-- Footer with unsubscribe link (HMAC-signed, no login needed)
+- Footer with unsubscribe link (HMAC-SHA256 signed, no login needed)
 ```
 
 ### 9.3 Unsubscribe Token
@@ -846,10 +1070,10 @@ if (expected !== token) → redirect /?unsubscribe=invalid
 
 ```
 Request arrives → middleware
-  req.cookies.get('_lat')?.value === '2026-05-22'?
+  req.cookies.get('_lat')?.value === '2026-05-23'?
     YES → NextResponse.next()  (no work done)
     NO  → fire fetch to /api/internal/track-active
-          set cookie: _lat=2026-05-22, maxAge=86400, httpOnly, sameSite=lax
+          set cookie: _lat=2026-05-23, maxAge=86400, httpOnly, sameSite=lax
           NextResponse.next()
 
 Cookie properties:
@@ -870,9 +1094,6 @@ Solution: fetch() without await.
   - The page response is returned to the browser immediately
   - The DB update happens in the background (Vercel serverless function)
   - If it fails → no problem, next request will retry (cookie not set yet)
-
-Note: In Next.js middleware, fire-and-forget fetch works because the
-      serverless function (track-active) has its own lifecycle.
 ```
 
 ---
@@ -885,17 +1106,16 @@ Note: In Next.js middleware, fire-and-forget fetch works because the
 // /company/[slug]/page.tsx
 
 export async function generateStaticParams() {
-  const companies = await fetchCompanyList()  // 662 companies
+  const companies = await getCompanyList()  // prisma.company.findMany() — NOT GitHub
   return companies.map(c => ({ slug: c.slug }))  // ONE page per company
 }
 
 // At build time, for EACH of the 662 pages:
-// 1. fetchProblems(slug, period) × 5 periods in parallel (all bundled as props)
-// 2. fetchCompanyStats(slug)
-// Total: 662 × 6 fetch calls = ~3,972 GitHub requests at build
-// (deduped by Next.js fetch cache — same URL hits cache on second call)
+// 1. getCompanyProblems(slug, period) × 5 periods in parallel (Prisma queries)
+// 2. getCompanyStats(slug) (Prisma query)
+// Total: 662 × 6 Prisma queries at build — all against Postgres, no GitHub HTTP calls
 // Result: 662 pre-rendered HTML pages — each contains ALL 5 period datasets
-//         Zero runtime GitHub calls for the happy path
+//         Zero runtime DB queries for the happy path (static HTML served from CDN)
 ```
 
 ### 11.2 Memory optimization (OOM prevention)
@@ -905,7 +1125,7 @@ export async function generateStaticParams() {
 "build": "prisma generate && node --max-old-space-size=4096 node_modules/next/dist/bin/next build"
 ```
 
-Default Node.js heap is ~1.5GB. Building 662 pages × 5 periods concurrently exhausts this. Setting 4GB prevents OOM crashes.
+Default Node.js heap is ~1.5GB. Building 662 pages concurrently exhausts this. Setting 4GB prevents OOM crashes.
 
 ### 11.3 Hover-based prefetch (instead of viewport-based)
 
@@ -919,8 +1139,20 @@ const handleMouseEnter = () => {
   if (hasPrefetched.current) return  // guard against duplicate calls on re-hover
   hasPrefetched.current = true
   router.prefetch(`/company/${company.slug}`)   // RSC prefetch
-  progressCache.prefetch(company.slug)           // API prefetch
+  progressCache.prefetch(company.slug)           // API prefetch (/api/user-progress?company=slug)
 }
+```
+
+### 11.4 Single bulk progress request
+
+```tsx
+// CompanyGrid — on mount (once, not per card):
+const data = await fetch('/api/user-progress')        // all companies at once
+progressCache.setSolvedByCompany(data.solvedByCompany) // populate for all 662
+
+// Old approach: one /api/user-progress?company=X request per visible card on scroll
+// New approach: one request for all 662 companies on mount
+// Result: 520 requests → 1 request on home page load
 ```
 
 ---
@@ -929,13 +1161,15 @@ const handleMouseEnter = () => {
 
 | Layer | Approach |
 |-------|---------|
-| GitHub fetch | Returns `[]` on any error — pages show "No data" gracefully |
+| Prisma queries (build-time) | Returns `[]` or `{}` on error — pages show "No data" gracefully |
 | API routes | Structured `{ error: string }` responses with appropriate HTTP status |
 | Rate limiter | Null-safe: if Redis down, rate limiting disabled, site continues |
 | Email send | Caught in try/catch, returns 500 with user-facing message |
 | progressCache | `.catch(() => {})` on all prefetch calls — silent failures |
 | SolveButton | Reverts optimistic update on network error or non-ok response |
-| Cron job | `Promise.allSettled()` — one email failure doesn't block others; counts logged |
+| Cron job (reengagement) | `Promise.allSettled()` — one email failure doesn't block others |
+| Cron job (refresh-data) | `skipDuplicates: true` — partial runs don't corrupt existing data |
+| LeetCode Sync | Session error → descriptive user-facing message; network error → 502 |
 | DB queries | Uncaught → Next.js 500 page (acceptable for unexpected errors) |
 
 ---
@@ -949,6 +1183,7 @@ const handleMouseEnter = () => {
 | Home page render | Dynamic (ƒ) | Static (○) | CDN-served |
 | Company page tab switch | ~500ms (GitHub fetch) | 0ms (pre-built) | Instant |
 | Solve count flash | ~300ms (API fetch) | 0ms (cache hit) | Zero flash |
-| Home page API calls on load | 50+ (Link prefetch) | 1 (user-progress) | 98% reduction |
-| SolvedProblem table redundancy | 3 extra columns | 0 extra columns | Cleaner schema |
-| OTP security | Plain text | SHA-256 hashed | Secure |
+| Home page API calls on load | 520+ (scroll prefetch) | 1 (bulk user-progress) | 99% reduction |
+| Build-time GitHub calls | 3,972 HTTP requests | 0 HTTP requests | Build uses DB |
+| LeetCode Sync DB lookup | N/A (old: 662 GitHub CSVs) | 1 Prisma query (titleSlug IN) | Instant |
+| UserSolvedProblem row count | 1 row per (user, problem, company) | 1 row per (user, problem) | No duplication |
