@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getCompanyList, getCompanyProblems, getCompanyStats } from '@/lib/companies'
+import { preloadAllCompanyData, getPreloadedProblems, getPreloadedStats } from '@/lib/build-preloader'
 import { formatCompanyName, getCompanyColor } from '@/lib/utils'
 import CompanyProgress from '@/components/CompanyProgress'
 import { TimePeriod, Problem } from '@/types'
@@ -12,6 +13,7 @@ interface CompanyPageProps {
 export const revalidate = 3600
 
 export async function generateStaticParams() {
+  await preloadAllCompanyData()
   const companies = await getCompanyList()
   return companies.map((c: { slug: string }) => ({ slug: c.slug }))
 }
@@ -25,14 +27,17 @@ export default async function CompanyPage({ params }: CompanyPageProps) {
   if (!company) notFound()
 
   const ALL_PERIODS: TimePeriod[] = ['thirty-days', 'three-months', 'six-months', 'more-than-six-months', 'all']
-  // Fetch all periods in parallel at build time — zero loading spinners when switching tabs
+
+  const preloadedStats = getPreloadedStats(slug)
   const [periodResults, stats] = await Promise.all([
-    Promise.all(ALL_PERIODS.map(p => getCompanyProblems(slug, p).then((probs: Problem[]) => [p, probs] as [TimePeriod, Problem[]]))),
-    getCompanyStats(slug),
+    Promise.all(ALL_PERIODS.map(async p => {
+      const probs: Problem[] = getPreloadedProblems(slug, p) ?? await getCompanyProblems(slug, p)
+      return [p, probs] as [TimePeriod, Problem[]]
+    })),
+    preloadedStats ? Promise.resolve(preloadedStats) : getCompanyStats(slug),
   ])
   const allPeriodProblems = Object.fromEntries(periodResults) as Record<TimePeriod, Problem[]>
 
-  // Same fallback order as fetchProblemsWithFallback
   const FALLBACK_ORDER: TimePeriod[] = ['six-months', 'three-months', 'all']
   const initialPeriod = FALLBACK_ORDER.find(p => allPeriodProblems[p].length > 0) ?? 'all'
 

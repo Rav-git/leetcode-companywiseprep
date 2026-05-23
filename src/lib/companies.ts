@@ -1,15 +1,17 @@
+import { unstable_cache } from 'next/cache'
 import prisma from './prisma'
 import { Company, CompanyWithStats, Problem, TimePeriod } from '@/types'
 
-// All functions read from your own DB — no runtime GitHub dependency.
-// GitHub CSVs are only fetched by scripts/seed.ts (once) and /api/cron/refresh-data (weekly).
-
-export async function getCompanyList(): Promise<Company[]> {
-  return prisma.company.findMany({
-    orderBy: { slug: 'asc' },
-    select: { slug: true, name: true },
-  })
-}
+export const getCompanyList = unstable_cache(
+  async (): Promise<Company[]> => {
+    return prisma.company.findMany({
+      orderBy: { slug: 'asc' },
+      select: { slug: true, name: true },
+    })
+  },
+  ['company-list'],
+  { revalidate: 86400 }
+)
 
 export async function getCompanyProblems(slug: string, period: TimePeriod): Promise<Problem[]> {
   const rows = await prisma.companyProblem.findMany({
@@ -57,35 +59,39 @@ export async function getCompanyStats(slug: string): Promise<Omit<CompanyWithSta
 
 // ONE query for all 662 companies — replaces the 662-call Promise.all loop on the home page.
 // Counts DISTINCT problems per company across all periods so each problem is counted once.
-export async function getAllCompaniesWithStats(): Promise<CompanyWithStats[]> {
-  const rows = await prisma.$queryRaw<Array<{
-    slug:        string
-    name:        string
-    totalCount:  bigint
-    easyCount:   bigint
-    mediumCount: bigint
-    hardCount:   bigint
-  }>>`
-    SELECT
-      c.slug,
-      c.name,
-      COUNT(DISTINCT cp."problemId")                                              AS "totalCount",
-      COUNT(DISTINCT CASE WHEN p.difficulty = 'Easy'   THEN cp."problemId" END)  AS "easyCount",
-      COUNT(DISTINCT CASE WHEN p.difficulty = 'Medium' THEN cp."problemId" END)  AS "mediumCount",
-      COUNT(DISTINCT CASE WHEN p.difficulty = 'Hard'   THEN cp."problemId" END)  AS "hardCount"
-    FROM "Company" c
-    LEFT JOIN "CompanyProblem" cp ON cp."companyId" = c.id
-    LEFT JOIN "Problem"        p  ON p.id           = cp."problemId"
-    GROUP BY c.id, c.slug, c.name
-    ORDER BY c.slug
-  `
+export const getAllCompaniesWithStats = unstable_cache(
+  async (): Promise<CompanyWithStats[]> => {
+    const rows = await prisma.$queryRaw<Array<{
+      slug:        string
+      name:        string
+      totalCount:  bigint
+      easyCount:   bigint
+      mediumCount: bigint
+      hardCount:   bigint
+    }>>`
+      SELECT
+        c.slug,
+        c.name,
+        COUNT(DISTINCT cp."problemId")                                              AS "totalCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Easy'   THEN cp."problemId" END)  AS "easyCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Medium' THEN cp."problemId" END)  AS "mediumCount",
+        COUNT(DISTINCT CASE WHEN p.difficulty = 'Hard'   THEN cp."problemId" END)  AS "hardCount"
+      FROM "Company" c
+      LEFT JOIN "CompanyProblem" cp ON cp."companyId" = c.id
+      LEFT JOIN "Problem"        p  ON p.id           = cp."problemId"
+      GROUP BY c.id, c.slug, c.name
+      ORDER BY c.slug
+    `
 
-  return rows.map(r => ({
-    slug:        r.slug,
-    name:        r.name,
-    totalCount:  Number(r.totalCount),
-    easyCount:   Number(r.easyCount),
-    mediumCount: Number(r.mediumCount),
-    hardCount:   Number(r.hardCount),
-  }))
-}
+    return rows.map(r => ({
+      slug:        r.slug,
+      name:        r.name,
+      totalCount:  Number(r.totalCount),
+      easyCount:   Number(r.easyCount),
+      mediumCount: Number(r.mediumCount),
+      hardCount:   Number(r.hardCount),
+    }))
+  },
+  ['all-companies-with-stats'],
+  { revalidate: 86400 }
+)
