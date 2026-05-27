@@ -8,16 +8,23 @@ import AuthProvider from '@/components/AuthProvider'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Code Company Wise — LeetCode Interview Prep',
+  title: 'Code Company Wise — LeetCode Company-wise Problems for Free',
   description:
-    'Browse 662 companies and their LeetCode interview questions. Track your solving progress for free.',
+    'Browse 662 companies and their real LeetCode interview questions by time period. Track your solving progress — free alternative to LeetCode Premium.',
   metadataBase: new URL('https://code-company-wise.vercel.app'),
   openGraph: {
-    title: 'Code Company Wise — LeetCode Interview Prep',
-    description: 'Browse 662 companies and their LeetCode interview questions. Free LeetCode Premium alternative.',
+    title: 'Code Company Wise — LeetCode Company-wise Problems for Free',
+    description: 'Browse 662 companies and their real LeetCode interview questions. Filter by difficulty, time period, and solved status — 100% free.',
     url: 'https://code-company-wise.vercel.app',
     siteName: 'Code Company Wise',
     type: 'website',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Code Company Wise' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Code Company Wise — LeetCode Company-wise Problems for Free',
+    description: 'Browse 662 companies and their real LeetCode interview questions. 100% free.',
+    images: ['/opengraph-image'],
   },
 }
 
