@@ -36,7 +36,7 @@ export default async function Home() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Browse by Company</h1>
           <p className="text-gray-400">
-            {allCompanies.length} companies · Real LeetCode Premium data · Feb 2026
+            Browse real interview problems asked by {allCompanies.length} companies · Filter by difficulty & time period · Track what you've solved
           </p>
         </div>
         <CompanyGrid companies={companiesWithStats} />

@@ -9,7 +9,7 @@ import { progressCache } from '@/lib/progress-cache'
 import { fetchAllCompanyProgress } from '@/services/progress.service'
 
 // 50 cards per batch — enough to fill a wide viewport without over-rendering on first load
-const CARDS_PER_BATCH = 50
+const CARDS_PER_BATCH = 20
 
 interface CompanyGridProps {
   companies: CompanyWithStats[]
@@ -40,7 +40,16 @@ export default function CompanyGrid({ companies }: CompanyGridProps) {
     setDisplayCount(CARDS_PER_BATCH)
   }, [search])
 
-  // Load next batch when the sentinel scrolls into view
+  const filtered = companies.filter(
+    c => search === '' || c.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const visible = filtered.slice(0, displayCount)
+  const hasMore = displayCount < filtered.length
+
+  // Load next batch when the sentinel scrolls into view.
+  // Depends on hasMore so the observer re-connects after sentinel remounts
+  // (e.g. user searches → clears search → sentinel reappears as a new DOM node).
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
@@ -51,19 +60,12 @@ export default function CompanyGrid({ companies }: CompanyGridProps) {
           setDisplayCount(prev => prev + CARDS_PER_BATCH)
         }
       },
-      { rootMargin: '300px' } // start loading 300px before the bottom edge
+      { rootMargin: '300px' }
     )
 
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
-
-  const filtered = companies.filter(
-    c => search === '' || c.name.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const visible = filtered.slice(0, displayCount)
-  const hasMore = displayCount < filtered.length
+  }, [hasMore])
 
   return (
     <div>
